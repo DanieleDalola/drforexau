@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>DR-Forexau — Grafico Oro</title>
   <style>
-    html,body { height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto; background:#0b0f14; }
-    .wrap { height:100%; display:flex; flex-direction:column; }
-    header { padding:12px 16px; color:#fff; border-bottom:1px solid #223; }
-    .chart { flex:1; }
-    select { background:#111; color:#fff; border:1px solid #334; border-radius:10px; padding:6px 10px; }
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto;background:#0b0f14;color:#fff}
+    .wrap{height:100%;display:flex;flex-direction:column}
+    header{padding:12px 16px;border-bottom:1px solid #223}
+    .chart{flex:1}
+    select{background:#111;color:#fff;border:1px solid #334;border-radius:10px;padding:6px 10px}
+    .toast{position:fixed;right:16px;bottom:16px;z-index:9999;background:#0b0f14;border:1px solid #334;padding:12px 14px;border-radius:14px;min-width:260px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+    .muted{opacity:.8;font-size:12px}
+    button{padding:6px 10px;border-radius:10px;border:1px solid #334;background:#111;color:#fff;cursor:pointer}
   </style>
 </head>
 <body>
@@ -17,8 +20,7 @@
     <header>
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <h3 style="margin:0">DR-Forexau — TradingView</h3>
-        <label>
-          Simbolo:
+        <label>Simbolo:
           <select id="symbol">
             <option value="OANDA:XAUUSD">XAUUSD (OANDA)</option>
             <option value="FX_IDC:XAUUSD">XAUUSD (FX_IDC)</option>
@@ -31,13 +33,22 @@
     <div id="tv" class="chart"></div>
   </div>
 
+  <!-- TradingView -->
   <script src="https://s3.tradingview.com/tv.js"></script>
+  <!-- Supabase client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <script>
-    let widget;
-    function render(sym){
+    // ✅ Chiavi Supabase
+    const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
+    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
+
+    // ========== TRADINGVIEW ==========
+    let tvWidget;
+    function render(symbol){
       document.getElementById('tv').innerHTML = '';
-      widget = new TradingView.widget({
-        symbol: sym,
+      tvWidget = new TradingView.widget({
+        symbol,
         interval: "15",
         container_id: "tv",
         autosize: true,
@@ -53,6 +64,77 @@
     const sel = document.getElementById('symbol');
     sel.addEventListener('change', e => render(e.target.value));
     render(sel.value);
+
+    // ========== SUPABASE ==========
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+    // Banner “ultimo segnale”
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `
+      <div class="muted" style="margin-bottom:6px">Ultimo segnale</div>
+      <div id="sg-line" style="font-weight:700">—</div>
+      <div id="sg-sub" class="muted">In attesa…</div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button id="sg-apply">Apri sul grafico</button>
+        <button id="sg-close">Chiudi</button>
+      </div>
+      <div id="diag" class="muted" style="margin-top:8px;font-size:11px;line-height:1.2"></div>
+    `;
+    document.body.appendChild(toast);
+    const elLine = toast.querySelector('#sg-line');
+    const elSub  = toast.querySelector('#sg-sub');
+    const elDiag = toast.querySelector('#diag');
+
+    let last = null;
+
+    // test connessione
+    (async () => {
+      try {
+        const { data, error } = await sb.from('signals').select('id').limit(1);
+        elDiag.textContent = error ? ('Errore SELECT: '+error.message) : 'Connessione OK';
+      } catch (e) { elDiag.textContent = 'Eccezione: '+(e.message||e); }
+    })();
+
+    async function loadInitial() {
+      const { data, error } = await sb
+        .from('signals')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (!error && data?.length) showSignal(data[0]);
+      if (error) elDiag.textContent = 'Errore loadInitial: '+error.message;
+    }
+
+    sb.channel('signals-feed')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'signals' }, (payload) => {
+        showSignal(payload.new);
+      })
+      .subscribe((status) => {
+        elDiag.textContent = (elDiag.textContent ? elDiag.textContent+' | ' : '') + 'Realtime: ' + status;
+      });
+
+    function showSignal(s) {
+      last = s;
+      const side = (s.side || '').toUpperCase();
+      const color = side === 'BUY' ? '#16a34a' : '#ef4444';
+      elLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry}`;
+      elSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
+    }
+
+    document.getElementById('sg-apply')?.addEventListener('click', () => {
+      if (!last) return;
+      const code = (last.symbol || 'XAUUSD').toUpperCase();
+      const preferred = code === 'XAUUSD' ? 'OANDA:XAUUSD'
+                    : code === 'XAGUSD' ? 'OANDA:XAGUSD'
+                    : code === 'EURUSD' ? 'OANDA:EURUSD'
+                    : 'OANDA:XAUUSD';
+      sel.value = preferred;
+      sel.dispatchEvent(new Event('change'));
+    });
+    document.getElementById('sg-close')?.addEventListener('click', () => toast.remove());
+
+    loadInitial();
   </script>
 </body>
 </html>
