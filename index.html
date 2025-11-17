@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DR-Forexau — Grafico Oro</title>
+  <style>
+    html,body { height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto; background:#0b0f14; }
+    .wrap { height:100%; display:flex; flex-direction:column; }
+    header { padding:12px 16px; color:#fff; border-bottom:1px solid #223; }
+    .chart { flex:1; }
+    select { background:#111; color:#fff; border:1px solid #334; border-radius:10px; padding:6px 10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0">DR-Forexau — TradingView</h3>
+        <label>
+          Simbolo:
+          <select id="symbol">
+            <option value="OANDA:XAUUSD">XAUUSD (OANDA)</option>
+            <option value="FX_IDC:XAUUSD">XAUUSD (FX_IDC)</option>
+            <option value="OANDA:XAGUSD">XAGUSD</option>
+            <option value="OANDA:EURUSD">EURUSD</option>
+          </select>
+        </label>
+      </div>
+    </header>
+    <div id="tv" class="chart"></div>
+  </div>
+
+  <script src="https://s3.tradingview.com/tv.js"></script>
+  <script>
+    let widget;
+    function render(sym){
+      document.getElementById('tv').innerHTML = '';
+      widget = new TradingView.widget({
+        symbol: sym,
+        interval: "15",
+        container_id: "tv",
+        autosize: true,
+        theme: "dark",
+        style: "1",
+        locale: "it",
+        withdateranges: true,
+        hide_side_toolbar: false,
+        hide_top_toolbar: false,
+        timezone: "Europe/Rome",
+      });
+    }
+    const sel = document.getElementById('symbol');
+    sel.addEventListener('change', e => render(e.target.value));
+    render(sel.value);
+  </script>
+</body>
+</html>
