@@ -9,8 +9,9 @@
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0b0f14">
 
-  <link rel="icon" type="image/png" href="icons/icon-192.png">
-  <link rel="apple-touch-icon" href="icons/icon-512.png">
+  <!-- Icone -->
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/icon-512.png">
 
   <style>
     html,body{
@@ -151,26 +152,34 @@
       background:#111827;
       color:#e5e7eb;
     }
+
+    /* Bottone install PWA */
     .install-btn {
-      margin-top: 10px;
-      padding: 8px 14px;
-      border-radius: 999px;
-      border: 1px solid #334155;
-      background: #020617;
-      color: #e2e8f0;
-      font-size: 13px;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
+      margin-left:8px;
+      padding:8px 14px;
+      border-radius:999px;
+      border:1px solid #334155;
+      background:#020617;
+      color:#e2e8f0;
+      font-size:13px;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      cursor:pointer;
     }
-    .install-btn span { font-size: 16px; }
-    .install-btn:hover { background: #0f172a; }
-    .install-btn.hidden { display: none; }
+    .install-btn span {
+      font-size:16px;
+    }
+    .install-btn:hover {
+      background:#0f172a;
+    }
+    .install-btn.hidden {
+      display:none;
+    }
   </style>
 
+  <!-- Service worker -->
   <script>
-    // Service worker PWA
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/service-worker.js')
@@ -226,6 +235,12 @@
             <option value="OANDA:EURUSD">EURUSD</option>
           </select>
         </label>
+
+        <!-- Bottone install PWA -->
+        <button id="install-btn" type="button" class="install-btn hidden">
+          <span>⬇️</span> Installa app
+        </button>
+
         <button id="logout-btn" type="button">Logout</button>
       </div>
     </div>
@@ -292,17 +307,22 @@
 
 <script>
 // ========================
-// CONFIG / LOGGER
+// LOGGER
 // ========================
-function log(msg){ console.log(msg); }
+function log(msg){
+  console.log(msg);
+}
 
+// ========================
+// SUPABASE CLIENT
+// ========================
 const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ========================
-// DOM AUTH
+// DOM ELEMENTS
 // ========================
 const authView        = document.getElementById('auth-view');
 const appView         = document.getElementById('app-view');
@@ -312,74 +332,33 @@ const emailInput      = document.getElementById('email');
 const passwordInput   = document.getElementById('password');
 const userEmailLabel  = document.getElementById('user-email-label');
 const logoutBtn       = document.getElementById('logout-btn');
+const installBtn      = document.getElementById('install-btn');
 
 let currentUserEmail = '';
-let appInitialized   = false;
+let dataStarted = false;
 
 // ========================
-// TOAST (creato solo dopo login)
-// ========================
-let toast = null;
-let eLine = null;
-let eSub  = null;
-let lastSignal = null;
-
-function ensureToast(){
-  if (toast) return;
-  toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.innerHTML = `
-    <div style="font-weight:700">Ultimo segnale</div>
-    <div id="sg-line" style="margin-top:4px"></div>
-    <div id="sg-sub" class="muted"></div>
-    <div class="row" style="margin-top:8px">
-      <button id="sg-open">Apri sul grafico</button>
-      <button id="sg-close" style="background:#1b0f0f;border-color:#442">Chiudi</button>
-    </div>
-  `;
-  document.body.appendChild(toast);
-  eLine = toast.querySelector('#sg-line');
-  eSub  = toast.querySelector('#sg-sub');
-
-  document.getElementById('sg-open').addEventListener('click', () => {
-    try{
-      if (!lastSignal) return;
-      const code = (lastSignal.symbol || 'XAUUSD').toUpperCase();
-      const preferred =
-        code === 'XAUUSD' ? 'OANDA:XAUUSD' :
-        code === 'XAGUSD' ? 'OANDA:XAGUSD' :
-        code === 'EURUSD' ? 'OANDA:EURUSD' : 'OANDA:XAUUSD';
-      sel.value = preferred;
-      sel.dispatchEvent(new Event('change'));
-    }catch(e){
-      log("sg-open error: "+(e.message||e));
-    }
-  });
-
-  document.getElementById('sg-close').addEventListener('click', () => {
-    if (toast) toast.style.display = 'none';
-  });
-}
-
-// ========================
-// FUNZIONI VIEW
+// LOGIN / LOGOUT VIEW
 // ========================
 function showApp(){
   authView.style.display = 'none';
   appView.style.display  = 'flex';
   userEmailLabel.textContent = currentUserEmail ? `(${currentUserEmail})` : '';
-  initAppOnce();
+
+  if (!dataStarted){
+    dataStarted = true;
+    startDataStreams();
+  }
 }
 
 function showLogin(){
   authView.style.display = 'flex';
   appView.style.display  = 'none';
-  loginMsg.textContent   = '';
+  loginMsg.textContent = '';
+  // nascondo il toast quando non loggato
+  toast.style.display = 'none';
 }
 
-// ========================
-// LOGIN / LOGOUT
-// ========================
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   loginMsg.textContent = 'Accesso in corso...';
@@ -388,7 +367,10 @@ loginForm.addEventListener('submit', async (e) => {
   const password = passwordInput.value;
 
   try{
+    // 1) provo login
     let { data, error } = await sb.auth.signInWithPassword({ email, password });
+
+    // 2) se credenziali non valide, provo signup
     if (error && error.message && error.message.includes('Invalid login credentials')) {
       const signUp = await sb.auth.signUp({ email, password });
       if (signUp.error) throw signUp.error;
@@ -447,7 +429,7 @@ function renderTV(symbol){
 sel.addEventListener('change', () => renderTV(sel.value));
 
 // ========================
-// LEVELS CHART
+// LEVELS (LIGHTWEIGHT CHARTS)
 // ========================
 let chart, series, priceLines = [];
 
@@ -530,6 +512,69 @@ function drawLevels(sig){
 }
 
 // ========================
+// TOAST ULTIMO SEGNALE
+// ========================
+const toast = document.createElement('div');
+toast.className = 'toast';
+toast.style.display = 'none';
+toast.innerHTML = `
+  <div style="font-weight:700">Ultimo segnale</div>
+  <div id="sg-line" style="margin-top:4px"></div>
+  <div id="sg-sub" class="muted"></div>
+  <div class="row" style="margin-top:8px">
+    <button id="sg-open">Apri sul grafico</button>
+    <button id="sg-close" style="background:#1b0f0f;border-color:#442">Chiudi</button>
+  </div>
+`;
+document.body.appendChild(toast);
+
+const eLine = toast.querySelector('#sg-line');
+const eSub  = toast.querySelector('#sg-sub');
+let lastSignal = null;
+
+function showSignal(s){
+  try{
+    lastSignal = s;
+    const side = (s.side||'').toUpperCase();
+    const color = side === 'BUY' ? '#16a34a' : '#ef4444';
+    const kind = (s.order_kind||'market').toUpperCase();
+
+    eLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry} <span class="muted">(${kind})</span>`;
+    eSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
+
+    drawLevels(s);
+
+    // mostro il toast solo se la dashboard è visibile
+    if (appView.style.display !== 'none') {
+      toast.style.display = 'block';
+    }
+
+    log("Mostrato ultimo segnale.");
+  }catch(e){
+    log("showSignal error: "+(e.message||e));
+  }
+}
+
+document.getElementById('sg-open').addEventListener('click', () => {
+  try{
+    if (!lastSignal) return;
+    const code = (lastSignal.symbol || 'XAUUSD').toUpperCase();
+    const preferred =
+      code === 'XAUUSD' ? 'OANDA:XAUUSD' :
+      code === 'XAGUSD' ? 'OANDA:XAGUSD' :
+      code === 'EURUSD' ? 'OANDA:EURUSD' : 'OANDA:XAUUSD';
+    sel.value = preferred;
+    sel.dispatchEvent(new Event('change'));
+  }catch(e){
+    log("sg-open error: "+(e.message||e));
+  }
+});
+
+document.getElementById('sg-close').addEventListener('click', () => {
+  toast.style.display = 'none';
+});
+
+// ========================
 // DASHBOARD / WINRATE
 // ========================
 const tbodySignals = document.getElementById('signals-body');
@@ -555,9 +600,9 @@ function renderDashboardRows(rows){
     else open++;
 
     let badge;
-    if (res === 'win')      badge = '<span class="badge badge-win">Win</span>';
+    if (res === 'win') badge = '<span class="badge badge-win">Win</span>';
     else if (res === 'loss') badge = '<span class="badge badge-loss">Loss</span>';
-    else                     badge = '<span class="badge badge-open">Open</span>';
+    else badge = '<span class="badge badge-open">Open</span>';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -604,28 +649,8 @@ async function loadDashboard(){
 }
 
 // ========================
-// SEGNALE CORRENTE + REALTIME
+// SUPABASE: ULTIMO SEGNALE + REALTIME
 // ========================
-function showSignal(s){
-  try{
-    ensureToast();
-    toast.style.display = 'block';
-
-    lastSignal = s;
-    const side = (s.side||'').toUpperCase();
-    const color = side === 'BUY' ? '#16a34a' : '#ef4444';
-    const kind = (s.order_kind||'market').toUpperCase();
-
-    eLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry} <span class="muted">(${kind})</span>`;
-    eSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
-
-    drawLevels(s);
-    log("Mostrato ultimo segnale.");
-  }catch(e){
-    log("showSignal error: "+(e.message||e));
-  }
-}
-
 async function loadInitialSignal(){
   try{
     const { data, error } = await sb
@@ -648,14 +673,19 @@ async function loadInitialSignal(){
   }
 }
 
+let realtimeChannel = null;
+
 function setupRealtime(){
-  sb.channel('signals-feed')
+  if (realtimeChannel) return;
+
+  realtimeChannel = sb.channel('signals-feed')
     .on('postgres_changes', { event:'INSERT', schema:'public', table:'signals' }, (payload) => {
       log("Realtime INSERT ricevuto");
       showSignal(payload.new);
       loadDashboard();
     })
     .on('postgres_changes', { event:'UPDATE', schema:'public', table:'signals' }, () => {
+      // update (per cancella / hit / stop hit)
       loadDashboard();
     })
     .subscribe((status) => {
@@ -663,24 +693,54 @@ function setupRealtime(){
     });
 }
 
-// ========================
-// INIZIALIZZAZIONE APP DOPO LOGIN
-// ========================
-function initAppOnce(){
-  if (appInitialized) return;
-  appInitialized = true;
-
-  initLevels();
+// avviato solo quando l'utente è loggato
+async function startDataStreams(){
   renderTV(sel.value);
-  loadDashboard();
-  loadInitialSignal();
+  initLevels();
+  await loadDashboard();
+  await loadInitialSignal();
   setupRealtime();
 }
 
 // ========================
-// BOOTSTRAP: controlla sessione
+// PWA INSTALL BUTTON
+// ========================
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) {
+    installBtn.classList.remove('hidden');
+  }
+  console.log('beforeinstallprompt ricevuto');
+});
+
+if (installBtn) {
+  installBtn.addEventListener('click', async () => {
+    try {
+      if (!deferredPrompt) {
+        alert('Se non vedi il popup, usa il menu del browser per installare l’app.');
+        return;
+      }
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log('User choice:', outcome);
+      if (outcome === 'accepted') {
+        installBtn.classList.add('hidden');
+      }
+      deferredPrompt = null;
+    } catch (err) {
+      console.error('Errore install PWA:', err);
+    }
+  });
+}
+
+// ========================
+// BOOTSTRAP
 // ========================
 (async () => {
+  // controllo se esiste già una sessione
   try{
     const { data } = await sb.auth.getSession();
     if (data && data.session && data.session.user){
