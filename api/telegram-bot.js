@@ -1,100 +1,209 @@
-// ================================
-// TELEGRAM BOT WEBHOOK (VERCEL)
-// ================================
+// api/telegram-bot.js
+// Serverless function Vercel (Node.js – CommonJS)
 
-import { createClient } from '@supabase/supabase-js';
+// Helper per fare logging nei Runtime Logs di Vercel
+function log(...args) {
+  console.log('[TG]', ...args);
+}
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE
-);
+// Parsing di un testo tipo:
+// "SELL_LIMIT XAUUSD 4050 SL 4060 TP 4042.7"
+// "BUY XAUUSD 4040 SL 4030 TP 4060"
+// "SELL STOP XAUUSD 3990 SL 4000 TP 3960"
+function parseSignal(text) {
+  if (!text) return null;
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const API_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
+  // prendiamo solo la prima riga con un pattern riconoscibile
+  const lines = text.split('\n');
 
-export default async function handler(req, res) {
-  try {
-    if (req.method !== "POST") {
-      return res.status(200).json({ ok: true });
-    }
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
 
-    const update = req.body;
+    const re = /^(BUY|SELL)(?:\s*[_\s](LIMIT|STOP))?\s+([A-Z/]+)\s+(\d+(?:\.\d+)?)(?:\s+SL\s+(\d+(?:\.\d+)?))?(?:\s+TP\s+(\d+(?:\.\d+)?))?/i;
 
-    // Messaggio arrivato su Telegram
-    if (!update.message || !update.message.text) {
-      return res.status(200).send("no-message");
-    }
+    const m = trimmed.match(re);
+    if (!m) continue;
 
-    const chatId = update.message.chat.id;
-    const text = update.message.text.trim();
+    const side = m[1].toUpperCase();
+    const orderKind = (m[2] || 'MARKET').toUpperCase();  // LIMIT | STOP | MARKET
+    const symbol = m[3].toUpperCase();
+    const entry = parseFloat(m[4]);
+    const sl = m[5] ? parseFloat(m[5]) : null;
+    const tp = m[6] ? parseFloat(m[6]) : null;
 
-    // ==========================
-    // 1) Comando: /start
-    // ==========================
-    if (text === "/start") {
-      await sendMessage(chatId,
-        "👋 Benvenuto! Invia un segnale nel formato:\n\n" +
-        "`BUY XAUUSD 3290 SL 3280 TP 3305`\n" +
-        "`SELL_LIMIT XAUUSD 4050 SL 4060 TP 4042.7`"
-      );
-      return res.status(200).json({ ok: true });
-    }
+    if (!symbol || Number.isNaN(entry)) continue;
 
-    // ==========================
-    // 2) PARSING SEGNALI
-    // ==========================
-    const match = text.match(
-      /(BUY|SELL|BUY_LIMIT|SELL_LIMIT|BUY_STOP|SELL_STOP)\s+([A-Z]+)\s+([\d.]+)\s+SL\s+([\d.]+)\s+TP\s+([\d.]+)/
-    );
+    // status: pending se LIMIT/STOP, active se MARKET
+    const status =
+      orderKind === 'LIMIT' || orderKind === 'STOP' ? 'pending' : 'active';
 
-    if (!match) {
-      await sendMessage(chatId, "❌ Formato non riconosciuto.");
-      return res.status(200).json({ ok: true });
-    }
-
-    const [, rawSide, symbol, entry, sl, tp] = match;
-
-    // tipo di ordine
-    const side = rawSide.includes("BUY") ? "BUY" : "SELL";
-    const orderKind = rawSide.includes("LIMIT")
-      ? "limit"
-      : rawSide.includes("STOP")
-      ? "stop"
-      : "market";
-
-    // ==========================
-    // 3) SALVA SU SUPABASE
-    // ==========================
-    const { error } = await supabase.from("signals").insert({
-      side,
+    return {
       symbol,
+      side,
+      order_kind: orderKind, // LIMIT / STOP / MARKET
       entry,
       sl,
       tp,
-      order_kind: orderKind,
-    });
+      status,
+    };
+  }
 
-    if (error) {
-      await sendMessage(chatId, "❌ Errore Supabase: " + error.message);
-    } else {
-      await sendMessage(chatId, "✅ Segnale salvato e inviato alla dashboard!");
-    }
+  return null;
+}
 
-    return res.status(200).json({ ok: true });
+// Salva su Supabase via REST API
+async function saveSignalToSupabase(signal) {
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE;
 
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: err.message });
+  if (!url || !serviceKey) {
+    log('Manca SUPABASE_URL o SUPABASE_SERVICE_ROLE');
+    return null;
+  }
+
+  const endpoint = `${url}/rest/v1/signals`;
+
+  const payload = {
+    symbol: signal.symbol,
+    side: signal.side,
+    order_kind: signal.order_kind,
+    entry: signal.entry,
+    sl: signal.sl,
+    tp: signal.tp,
+    status: signal.status,
+  };
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text();
+  log('Supabase response', res.status, text);
+
+  if (!res.ok) {
+    throw new Error(`Supabase error ${res.status}: ${text}`);
+  }
+
+  try {
+    const json = JSON.parse(text);
+    return Array.isArray(json) ? json[0] : json;
+  } catch {
+    return null;
   }
 }
 
-// =========================
-// SEND MESSAGE TO TELEGRAM
-// =========================
-async function sendMessage(chatId, text) {
-  await fetch(`${API_URL}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+// Manda un messaggio via Telegram API
+async function sendTelegramMessage(chatId, text) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    log('Manca TELEGRAM_BOT_TOKEN');
+    return;
+  }
+
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown',
+    }),
   });
+
+  const body = await res.text();
+  log('sendMessage', res.status, body);
 }
+
+// Handler principale (Vercel Node.js function)
+module.exports = async (req, res) => {
+  // Telegram invia POST; GET lo usiamo solo per test rapido
+  if (req.method === 'GET') {
+    return res.status(200).json({ ok: true, info: 'DR-Forexau Telegram webhook live' });
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(200).json({ ok: true });
+  }
+
+  let update = req.body;
+  if (typeof update === 'string') {
+    try {
+      update = JSON.parse(update);
+    } catch (e) {
+      log('Errore parse body string', e.message);
+      return res.status(200).json({ ok: true });
+    }
+  }
+
+  log('Update ricevuto:', JSON.stringify(update));
+
+  const msg =
+    update.message ||
+    update.channel_post ||
+    update.edited_message ||
+    update.edited_channel_post;
+
+  if (!msg) {
+    log('Nessun message/channel_post nel body');
+    return res.status(200).json({ ok: true });
+  }
+
+  const chatId = msg.chat && msg.chat.id;
+  const text = msg.text || '';
+
+  if (!chatId) {
+    log('Nessun chatId');
+    return res.status(200).json({ ok: true });
+  }
+
+  // Comandi base
+  if (text.startsWith('/start')) {
+    await sendTelegramMessage(
+      chatId,
+      '🤖 *DR-Forexau Signals Bot*\nBot collegato correttamente.\nInoltra qui un segnale tipo:\n`SELL_LIMIT XAUUSD 4050 SL 4060 TP 4042.7`'
+    );
+    return res.status(200).json({ ok: true });
+  }
+
+  if (text.startsWith('/test')) {
+    await sendTelegramMessage(chatId, '✅ Test ok, webhook funzionante.');
+    return res.status(200).json({ ok: true });
+  }
+
+  // Prova a parsare il segnale
+  const signal = parseSignal(text);
+  if (!signal) {
+    log('Nessun segnale riconosciuto in questo messaggio.');
+    // Non è obbligatorio rispondere ogni volta
+    return res.status(200).json({ ok: true });
+  }
+
+  try {
+    const saved = await saveSignalToSupabase(signal);
+    await sendTelegramMessage(
+      chatId,
+      `✅ Segnale registrato:\n` +
+        `*${signal.side} ${signal.order_kind}* ${signal.symbol}\n` +
+        `Entry: \`${signal.entry}\`\n` +
+        `SL: \`${signal.sl ?? '—'}\` · TP: \`${signal.tp ?? '—'}\``
+    );
+    log('Segnale salvato', saved);
+  } catch (e) {
+    log('Errore salvataggio segnale', e.message);
+    await sendTelegramMessage(
+      chatId,
+      '⚠️ Errore nel salvataggio del segnale su Supabase.'
+    );
+  }
+
+  return res.status(200).json({ ok: true });
+};
