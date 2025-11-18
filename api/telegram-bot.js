@@ -101,12 +101,12 @@ function parseSignal(text) {
     order_kind = "market";
   }
 
-  // symbol: di base XAUUSD, ma gestiamo XAG / EURUSD
+  // symbol
   let symbol = "XAUUSD";
   if (lower.includes("xag")) symbol = "XAGUSD";
   if (lower.includes("eurusd")) symbol = "EURUSD";
 
-  // Entry / SL / TP – gestiamo formati:
+  // Entry / SL / TP – gestiamo:
   // "Entry 4005" / "Entry4005"
   // "SL 3995" / "SL3995"
   // "TP 4035" / "TP4035"
@@ -127,7 +127,6 @@ function parseSignal(text) {
   }
 
   if (!entry || !sl || !tp) {
-    // se mancano i numeri fondamentali, meglio non registrare
     return null;
   }
 
@@ -159,7 +158,6 @@ export default async function handler(req, res) {
 
     const chatId = msg.chat.id;
     const text = (msg.text || msg.caption || "").trim();
-
     if (!text) {
       return res.status(200).json({ ok: true });
     }
@@ -167,12 +165,17 @@ export default async function handler(req, res) {
     const lower = text.toLowerCase();
 
     // ===== COMANDI SPECIALI =====
+
+    // 1) Cancella ultimo segnale aperto
     if (lower === "cancella" || lower === "cancellare") {
       const last = await getLastOpenSignal();
       if (!last) {
         await sendTelegram(chatId, "⚠️ Nessun segnale aperto da cancellare.");
       } else {
-        await updateSignal(last.id, { status: "cancelled", result: "cancelled" });
+        await updateSignal(last.id, {
+          status: "cancelled",
+          result: "cancelled",
+        });
         await sendTelegram(
           chatId,
           `✅ Ultimo segnale <b>ID ${last.id}</b> è stato <b>cancellato</b>.`
@@ -181,15 +184,43 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // 2) HIT = TP colpito → WIN
     if (lower === "hit") {
       const last = await getLastOpenSignal();
       if (!last) {
         await sendTelegram(chatId, "⚠️ Nessun segnale aperto da marcare come win.");
       } else {
-        await updateSignal(last.id, { status: "closed", result: "win" });
+        await updateSignal(last.id, {
+          status: "closed",
+          result: "win",
+        });
         await sendTelegram(
           chatId,
-          `✅ Segnale <b>ID ${last.id}</b> marcato come <b>WIN</b>.`
+          `✅ Segnale <b>ID ${last.id}</b> marcato come <b>WIN (TP hit)</b>.`
+        );
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // 3) STOP HIT / SL HIT = SL colpito → LOSS
+    if (
+      lower === "stop hit" ||
+      lower === "stophit" ||
+      lower === "stop-hit" ||
+      lower === "sl hit" ||
+      lower === "slhit"
+    ) {
+      const last = await getLastOpenSignal();
+      if (!last) {
+        await sendTelegram(chatId, "⚠️ Nessun segnale aperto da marcare come loss.");
+      } else {
+        await updateSignal(last.id, {
+          status: "closed",
+          result: "loss",
+        });
+        await sendTelegram(
+          chatId,
+          `❌ Segnale <b>ID ${last.id}</b> marcato come <b>LOSS (SL hit)</b>.`
         );
       }
       return res.status(200).json({ ok: true });
@@ -223,7 +254,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("Handler error:", err);
-    // rispondiamo comunque 200 a Telegram, così non continua a ritentare
     return res.status(200).json({ ok: false, error: String(err) });
   }
 }
