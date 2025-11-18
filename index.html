@@ -138,15 +138,7 @@
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 
 <script>
-/* ===== DIAGNOSTICA SEMPRE VISIBILE ===== */
-const diag = document.createElement('div');
-diag.style.cssText = "position:fixed;left:16px;bottom:16px;z-index:10000;background:#0b0f14;border:1px solid #334;color:#cbd5e1;border-radius:10px;padding:10px 12px;max-width:420px;font:12px/1.4 system-ui";
-diag.innerHTML = "<b>Diagnostica</b><div id='dlog' style='margin-top:6px;white-space:pre-wrap'></div>";
-document.body.appendChild(diag);
-const dlog = diag.querySelector('#dlog');
-function log(msg){ dlog.textContent = (dlog.textContent ? dlog.textContent+"\n" : "") + msg; }
-window.addEventListener('error', e => log("JS Error: "+(e.message||e)));
-window.addEventListener('unhandledrejection', e => log("Promise Error: "+(e.reason?.message||e.reason||e)));
+
 
 /* ===== CONFIG ===== */
 const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
