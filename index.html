@@ -5,24 +5,95 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>DR-Forexau — Grafico Oro</title>
   <style>
-    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto;background:#0b0f14;color:#fff}
-    .wrap{min-height:100%;display:flex;flex-direction:column;gap:16px}
-    header{padding:12px 16px;border-bottom:1px solid #223}
-    h3{margin:0}
-    .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-    select{background:#111;border:1px solid #334;color:#fff;border-radius:10px;padding:6px 10px}
-    .card{background:#0e141b;border:1px solid #223;border-radius:16px;padding:12px}
-    .chart{height:70vh;min-height:420px}
-    .muted{opacity:.8;font-size:12px}
-    .toast{
-      position:fixed;right:16px;bottom:16px;z-index:9999;
-      background:#0b0f14;border:1px solid #334;border-radius:14px;padding:12px 14px;
-      box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:360px
+    html,body{
+      height:100%;
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto;
+      background:#0b0f14;
+      color:#fff;
     }
-    button{padding:8px 12px;border-radius:10px;border:1px solid #334;background:#111;color:#fff;cursor:pointer}
+    .wrap{
+      min-height:100%;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+    header{
+      padding:12px 16px;
+      border-bottom:1px solid #223;
+    }
+    h3{margin:0}
+    .row{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    select{
+      background:#111;
+      border:1px solid #334;
+      color:#fff;
+      border-radius:10px;
+      padding:6px 10px;
+    }
+    .card{
+      background:#0e141b;
+      border:1px solid #223;
+      border-radius:16px;
+      padding:12px 16px;
+      margin:0 12px 8px;
+    }
+    .chart{
+      height:70vh;
+      min-height:420px;
+    }
+    .muted{
+      opacity:.8;
+      font-size:12px;
+    }
+    .toast{
+      position:fixed;
+      right:16px;
+      bottom:16px;
+      z-index:9999;
+      background:#0b0f14;
+      border:1px solid #334;
+      border-radius:14px;
+      padding:12px 14px;
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
+      max-width:360px;
+      font-size:13px;
+    }
+    button{
+      padding:8px 12px;
+      border-radius:10px;
+      border:1px solid #334;
+      background:#111;
+      color:#fff;
+      cursor:pointer;
+    }
     button:hover{background:#132}
-    .pill{display:inline-flex;align-items:center;border:1px solid #334;border-radius:999px;padding:2px 8px;font-size:12px;gap:6px}
-    .dot{width:8px;height:8px;border-radius:999px;background:#16a34a}
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      border:1px solid #334;
+      border-radius:999px;
+      padding:2px 8px;
+      font-size:12px;
+      gap:6px;
+    }
+    .dot{
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:#16a34a;
+    }
+    #levels{
+      height:280px;
+      border:1px solid #223;
+      border-radius:12px;
+      margin-top:8px;
+    }
   </style>
 </head>
 <body>
@@ -46,31 +117,45 @@
     <div id="tv" class="chart"></div>
   </div>
 
-  <div class="card" style="padding:16px 16px 8px">
+  <div class="card">
     <div class="row" style="justify-content:space-between">
       <h4 style="margin:0">Levels</h4>
-      <span class="pill"><span class="dot" id="pending-dot"></span><span id="pending-label">Attivo/Market</span></span>
+      <span class="pill">
+        <span class="dot" id="pending-dot"></span>
+        <span id="pending-label">Attivo/Market</span>
+      </span>
     </div>
-    <div id="levels" style="height:280px;border:1px solid #223;border-radius:12px;margin-top:8px"></div>
+    <div id="levels"></div>
   </div>
 
 </div>
 
-<!-- TradingView -->
+<!-- TradingView widget -->
 <script src="https://s3.tradingview.com/tv.js"></script>
-<!-- Supabase -->
+<!-- Supabase client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- Lightweight Charts (una sola volta) -->
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<!-- Lightweight Charts -->
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 
 <script>
-  // ========= CONFIG =========
-  const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
-  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
+/* ===== DIAGNOSTICA SEMPRE VISIBILE ===== */
+const diag = document.createElement('div');
+diag.style.cssText = "position:fixed;left:16px;bottom:16px;z-index:10000;background:#0b0f14;border:1px solid #334;color:#cbd5e1;border-radius:10px;padding:10px 12px;max-width:420px;font:12px/1.4 system-ui";
+diag.innerHTML = "<b>Diagnostica</b><div id='dlog' style='margin-top:6px;white-space:pre-wrap'></div>";
+document.body.appendChild(diag);
+const dlog = diag.querySelector('#dlog');
+function log(msg){ dlog.textContent = (dlog.textContent ? dlog.textContent+"\n" : "") + msg; }
+window.addEventListener('error', e => log("JS Error: "+(e.message||e)));
+window.addEventListener('unhandledrejection', e => log("Promise Error: "+(e.reason?.message||e.reason||e)));
 
-  // ========= TRADINGVIEW =========
-  let tvWidget;
-  function renderTV(symbol){
+/* ===== CONFIG ===== */
+const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
+
+/* ===== TRADINGVIEW ===== */
+let tvWidget;
+function renderTV(symbol){
+  try{
     document.getElementById('tv').innerHTML = '';
     tvWidget = new TradingView.widget({
       symbol,
@@ -85,14 +170,17 @@
       hide_top_toolbar: false,
       timezone: "Europe/Rome",
     });
-  }
-  const sel = document.getElementById('symbol');
-  sel.addEventListener('change', () => renderTV(sel.value));
-  renderTV(sel.value);
+    log("TradingView ok: "+symbol);
+  }catch(e){ log("TradingView error: "+(e.message||e)); }
+}
+const sel = document.getElementById('symbol');
+sel.addEventListener('change', () => renderTV(sel.value));
+renderTV(sel.value);
 
-  // ========= LEVELS (Lightweight Charts) =========
-  let chart, series, priceLines = [];
-  function initLevels() {
+/* ===== LEVELS (Lightweight Charts) ===== */
+let chart, series, priceLines = [];
+function initLevels(){
+  try{
     const el = document.getElementById('levels');
     el.innerHTML = '';
     chart = LightweightCharts.createChart(el, {
@@ -102,14 +190,15 @@
       timeScale: { visible:false, borderColor:'#1f2937' },
       grid: { vertLines:{ color:'#111827' }, horzLines:{ color:'#111827' } },
     });
-    series = chart.addLineSeries({ color:'#999' }); // basta per creare le price lines
-  }
-  initLevels();
+    series = chart.addLineSeries({ color:'#999' });
+    log("Levels chart ok");
+  }catch(e){ log("Levels init error: "+(e.message||e)); }
+}
+initLevels();
 
-  function drawLevels(sig){
+function drawLevels(sig){
+  try{
     if (!series) initLevels();
-
-    // pulisci linee precedenti
     priceLines.forEach(pl => series.removePriceLine(pl));
     priceLines = [];
 
@@ -117,94 +206,63 @@
     const kind = (sig.order_kind||'market').toLowerCase();
     const isPending = !sig.filled_at && (kind==='limit' || kind==='stop');
 
-    // conversione numerica sicura
-    const toNum = v => (v==null ? NaN : Number(v));
-    const entry = toNum(sig.entry);
-    const sl    = toNum(sig.sl);
-    const tp    = toNum(sig.tp);
+    const n = v => (v==null ? NaN : Number(v));
+    const entry = n(sig.entry), sl = n(sig.sl), tp = n(sig.tp);
 
     const entryColor = isPending ? '#eab308' : (side==='BUY' ? '#16a34a' : '#ef4444');
     const entryStyle = isPending ? LightweightCharts.LineStyle.Dotted
                                  : LightweightCharts.LineStyle.Solid;
 
-    if (!Number.isNaN(entry)) {
+    if (!Number.isNaN(entry)){
       priceLines.push(series.createPriceLine({
         price: entry, color: entryColor, lineWidth: 2, lineStyle: entryStyle,
         title: `ENTRY ${entry}${isPending?' (pend.)':''}`,
       }));
     }
-    if (!Number.isNaN(sl)) {
+    if (!Number.isNaN(sl)){
       priceLines.push(series.createPriceLine({
         price: sl, color: '#ef4444', lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Solid, title: `SL ${sl}`,
       }));
     }
-    if (!Number.isNaN(tp)) {
+    if (!Number.isNaN(tp)){
       priceLines.push(series.createPriceLine({
         price: tp, color: '#16a34a', lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Solid, title: `TP ${tp}`,
       }));
     }
 
-    // badge stato
-    const dot   = document.getElementById('pending-dot');
-    const label = document.getElementById('pending-label');
-    if (isPending){ dot.style.background='#eab308'; label.textContent='Pendente'; }
-    else          { dot.style.background='#16a34a'; label.textContent='Attivo/Market'; }
-  }
+    const dot = document.getElementById('pending-dot');
+    const lab = document.getElementById('pending-label');
+    if (isPending){ dot.style.background='#eab308'; lab.textContent='Pendente'; }
+    else          { dot.style.background='#16a34a'; lab.textContent='Attivo/Market'; }
 
-  // ========= SUPABASE =========
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    log(`Drawn levels: side=${side} kind=${kind} entry=${entry} sl=${sl} tp=${tp}`);
+  }catch(e){ log("drawLevels error: "+(e.message||e)); }
+}
 
-  // toast “ultimo segnale”
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.innerHTML = `
-    <div style="font-weight:700">Ultimo segnale</div>
-    <div id="sg-line" style="margin-top:4px"></div>
-    <div id="sg-sub" class="muted"></div>
-    <div class="row" style="margin-top:8px">
-      <button id="sg-open">Apri sul grafico</button>
-      <button id="sg-close" style="background:#1b0f0f;border-color:#442">Chiudi</button>
-    </div>
-    <div id="diag" class="muted" style="margin-top:8px;font-size:11px;line-height:1.2"></div>
-  `;
-  document.body.appendChild(toast);
-  const eLine = toast.querySelector('#sg-line');
-  const eSub  = toast.querySelector('#sg-sub');
-  const eDiag = toast.querySelector('#diag');
+/* ===== SUPABASE + TOAST ===== */
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-  let last = null;
+const toast = document.createElement('div');
+toast.className = 'toast';
+toast.innerHTML = `
+  <div style="font-weight:700">Ultimo segnale</div>
+  <div id="sg-line" style="margin-top:4px"></div>
+  <div id="sg-sub" class="muted"></div>
+  <div class="row" style="margin-top:8px">
+    <button id="sg-open">Apri sul grafico</button>
+    <button id="sg-close" style="background:#1b0f0f;border-color:#442">Chiudi</button>
+  </div>
+`;
+document.body.appendChild(toast);
+const eLine = toast.querySelector('#sg-line');
+const eSub  = toast.querySelector('#sg-sub');
 
-  // test connessione
-  (async () => {
-    try {
-      const { error } = await sb.from('signals').select('id').limit(1);
-      eDiag.textContent = error ? ('Errore SELECT: '+error.message) : 'Connessione OK';
-    } catch (e) { eDiag.textContent = 'Eccezione: '+(e?.message||e); }
-  })();
+let last = null;
 
-  // carica ultimo
-  async function loadInitial() {
-    const { data, error } = await sb
-      .from('signals')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1);
-    if (!error && data?.length) showSignal(data[0]);
-    else if (error) eDiag.textContent = 'Errore loadInitial: '+error.message;
-  }
-
-  // realtime su INSERT
-  sb.channel('signals-feed')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'signals' }, (payload) => {
-      showSignal(payload.new);
-    })
-    .subscribe(({status}) => {
-      eDiag.textContent = (eDiag.textContent ? eDiag.textContent+' | ' : '') + 'Realtime: '+status;
-    });
-
-  function showSignal(s){
+function showSignal(s){
+  try{
     last = s;
     const side = (s.side||'').toUpperCase();
     const color = side.includes('BUY') ? '#16a34a' : '#ef4444';
@@ -213,26 +271,56 @@
     eLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry} <span class="muted">(${kind})</span>`;
     eSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
 
-    drawLevels(s); // <— disegna/aggiorna le linee
-  }
+    drawLevels(s);
+    log("Mostrato ultimo segnale.");
+  }catch(e){ log("showSignal error: "+(e.message||e)); }
+}
 
-  // pulsanti toast
-  document.getElementById('sg-open').addEventListener('click', () => {
+document.getElementById('sg-open').addEventListener('click', () => {
+  try{
     if (!last) return;
     const code = (last.symbol || 'XAUUSD').toUpperCase();
     const preferred =
-        code === 'XAUUSD' ? 'OANDA:XAUUSD' :
-        code === 'XAGUSD' ? 'OANDA:XAGUSD' :
-        code === 'EURUSD' ? 'OANDA:EURUSD' :
-        'OANDA:XAUUSD';
+      code === 'XAUUSD' ? 'OANDA:XAUUSD' :
+      code === 'XAGUSD' ? 'OANDA:XAGUSD' :
+      code === 'EURUSD' ? 'OANDA:EURUSD' : 'OANDA:XAUUSD';
     sel.value = preferred;
     sel.dispatchEvent(new Event('change'));
-  });
-  document.getElementById('sg-close').addEventListener('click', () => toast.remove());
+  }catch(e){ log("sg-open error: "+(e.message||e)); }
+});
+document.getElementById('sg-close').addEventListener('click', () => toast.remove());
 
-  // bootstrap
-  loadInitial();
+(async () => {
+  try{
+    const { data, error } = await sb.from('signals').select('id').limit(1);
+    if (error) log("SELECT test error: "+error.message); else log("Connessione OK a Supabase");
+  }catch(e){ log("SELECT test exception: "+(e.message||e)); }
+})();
+
+async function loadInitial(){
+  try{
+    const { data, error } = await sb.from('signals')
+      .select('*')
+      .order('created_at', { ascending:false })
+      .limit(1);
+    if (error){ log("loadInitial error: "+error.message); return; }
+    if (data && data.length){ showSignal(data[0]); }
+    else { log("Nessun segnale in tabella."); }
+  }catch(e){ log("loadInitial exception: "+(e.message||e)); }
+}
+loadInitial();
+
+sb.channel('signals-feed')
+  .on('postgres_changes', { event:'INSERT', schema:'public', table:'signals' }, (payload) => {
+    log("Realtime INSERT ricevuto");
+    showSignal(payload.new);
+  })
+  .subscribe((status) => {
+    log("Realtime status: "+(status||'unknown'));
+  });
 </script>
+
 </body>
 </html>
+
 
