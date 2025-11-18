@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>DR-Forexau — Grafico Oro</title>
+  <title>DR-Forexau — Dashboard</title>
   <style>
     html,body{
       height:100%;
@@ -23,6 +23,7 @@
       border-bottom:1px solid #223;
     }
     h3{margin:0}
+    h4{margin:0}
     .row{
       display:flex;
       align-items:center;
@@ -94,32 +95,149 @@
       border-radius:12px;
       margin-top:8px;
     }
+    label{
+      font-size:13px;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    input{
+      background:#111;
+      border:1px solid #334;
+      border-radius:10px;
+      padding:8px 10px;
+      color:#fff;
+      width:100%;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+    }
+    th,td{
+      padding:4px 6px;
+      text-align:left;
+    }
+    thead th{
+      border-bottom:1px solid #223;
+      font-weight:600;
+    }
+    tbody tr:nth-child(even){
+      background:#0b1017;
+    }
+    .badge{
+      display:inline-block;
+      padding:2px 6px;
+      border-radius:999px;
+      font-size:11px;
+    }
+    .badge-win{
+      background:#052e16;
+      color:#bbf7d0;
+    }
+    .badge-loss{
+      background:#450a0a;
+      color:#fecaca;
+    }
+    .badge-open{
+      background:#111827;
+      color:#e5e7eb;
+    }
   </style>
 </head>
 <body>
-<div class="wrap">
+
+<!-- ====== VIEW LOGIN ====== -->
+<div id="auth-view" class="wrap" style="display:flex;justify-content:center;align-items:center;">
+  <div class="card" style="max-width:420px;width:100%;margin:40px 16px;">
+    <h3>DR-Forexau — Login</h3>
+    <p class="muted" style="margin-top:6px">
+      Inserisci email e password (Supabase Auth) per accedere alla dashboard.
+    </p>
+    <form id="login-form" style="margin-top:12px;display:flex;flex-direction:column;gap:10px;">
+      <label>
+        Email
+        <input id="email" type="email" autocomplete="email" required />
+      </label>
+      <label>
+        Password
+        <input id="password" type="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit">Entra</button>
+      <div id="login-msg" class="muted"></div>
+    </form>
+    <p class="muted" style="margin-top:10px;font-size:11px">
+      Se l'utente non esiste ancora, il sistema proverà a crearlo con questa email.
+    </p>
+  </div>
+</div>
+
+<!-- ====== VIEW APP ====== -->
+<div id="app-view" class="wrap" style="display:none;">
 
   <header>
     <div class="row" style="justify-content:space-between">
-      <h3>DR-Forexau — TradingView</h3>
-      <label>Simbolo:
-        <select id="symbol">
-          <option value="OANDA:XAUUSD">XAUUSD (OANDA)</option>
-          <option value="FX_IDC:XAUUSD">XAUUSD (FX_IDC)</option>
-          <option value="OANDA:XAGUSD">XAGUSD (Argento)</option>
-          <option value="OANDA:EURUSD">EURUSD</option>
-        </select>
-      </label>
+      <div class="row" style="gap:8px">
+        <h3>DR-Forexau — Dashboard</h3>
+        <span id="user-email-label" class="muted"></span>
+      </div>
+      <div class="row">
+        <label style="flex-direction:row;align-items:center;gap:6px;">
+          <span>Simbolo:</span>
+          <select id="symbol">
+            <option value="OANDA:XAUUSD">XAUUSD (OANDA)</option>
+            <option value="FX_IDC:XAUUSD">XAUUSD (FX_IDC)</option>
+            <option value="OANDA:XAGUSD">XAGUSD (Argento)</option>
+            <option value="OANDA:EURUSD">EURUSD</option>
+          </select>
+        </label>
+        <button id="logout-btn" type="button">Logout</button>
+      </div>
     </div>
   </header>
 
+  <!-- DASHBOARD SEGNALI -->
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:flex-end;">
+      <div>
+        <h4>Dashboard segnali</h4>
+        <div class="muted">Ultimi 50 segnali registrati dal bot Telegram</div>
+      </div>
+      <div class="row" style="gap:16px;font-size:13px;">
+        <div>Winrate: <strong id="stat-winrate">—</strong></div>
+        <div>Vinte: <strong id="stat-wins">0</strong></div>
+        <div>Perse: <strong id="stat-losses">0</strong></div>
+        <div>Aperte: <strong id="stat-open">0</strong></div>
+      </div>
+    </div>
+    <div style="margin-top:8px;max-height:260px;overflow:auto;">
+      <table id="signals-table">
+        <thead>
+          <tr>
+            <th>Ora</th>
+            <th>Symbol</th>
+            <th>Side</th>
+            <th>Tipo</th>
+            <th>Entry</th>
+            <th>SL</th>
+            <th>TP</th>
+            <th>Risultato</th>
+          </tr>
+        </thead>
+        <tbody id="signals-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- GRAFICO TRADINGVIEW -->
   <div class="card">
     <div id="tv" class="chart"></div>
   </div>
 
+  <!-- LEVELS -->
   <div class="card">
     <div class="row" style="justify-content:space-between">
-      <h4 style="margin:0">Levels</h4>
+      <h4>Levels</h4>
       <span class="pill">
         <span class="dot" id="pending-dot"></span>
         <span id="pending-label">Attivo/Market</span>
@@ -139,11 +257,83 @@
 
 <script>
 // ========================
-// LOGGER MINIMALE
+// LOGGER
 // ========================
 function log(msg){
   console.log(msg);
 }
+
+// ========================
+// SUPABASE CLIENT
+// ========================
+const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ========================
+// AUTH DOM
+// ========================
+const authView        = document.getElementById('auth-view');
+const appView         = document.getElementById('app-view');
+const loginForm       = document.getElementById('login-form');
+const loginMsg        = document.getElementById('login-msg');
+const emailInput      = document.getElementById('email');
+const passwordInput   = document.getElementById('password');
+const userEmailLabel  = document.getElementById('user-email-label');
+const logoutBtn       = document.getElementById('logout-btn');
+
+let currentUserEmail = '';
+
+function showApp(){
+  authView.style.display = 'none';
+  appView.style.display  = 'flex';
+  userEmailLabel.textContent = currentUserEmail ? `(${currentUserEmail})` : '';
+}
+
+function showLogin(){
+  authView.style.display = 'flex';
+  appView.style.display  = 'none';
+  loginMsg.textContent = '';
+}
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  loginMsg.textContent = 'Accesso in corso...';
+
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+
+  try{
+    // prima proviamo login
+    let { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error && error.message && error.message.includes('Invalid login credentials')) {
+      // se utente non esiste, lo creiamo
+      const signUp = await sb.auth.signUp({ email, password });
+      if (signUp.error) throw signUp.error;
+      data = signUp.data;
+    } else if (error) {
+      throw error;
+    }
+
+    currentUserEmail = (data && data.user && data.user.email) || email;
+    loginMsg.textContent = '';
+    showApp();
+  }catch(err){
+    console.error(err);
+    loginMsg.textContent = 'Errore login: ' + (err.message || err);
+  }
+});
+
+logoutBtn.addEventListener('click', async () => {
+  try{
+    await sb.auth.signOut();
+  }catch(e){
+    console.error(e);
+  }
+  currentUserEmail = '';
+  showLogin();
+});
 
 // ========================
 // TRADINGVIEW
@@ -177,7 +367,7 @@ sel.addEventListener('change', () => renderTV(sel.value));
 renderTV(sel.value);
 
 // ========================
-// LIGHTWEIGHT CHARTS (LEVELS)
+// LEVELS (LIGHTWEIGHT CHARTS)
 // ========================
 let chart, series, priceLines = [];
 
@@ -198,13 +388,11 @@ function initLevels(){
     log("Levels init error: "+(e.message||e));
   }
 }
-initLevels();
 
 function drawLevels(sig){
   try{
     if (!series) initLevels();
 
-    // pulisco le vecchie linee
     priceLines.forEach(pl => series.removePriceLine(pl));
     priceLines = [];
 
@@ -262,7 +450,7 @@ function drawLevels(sig){
 }
 
 // ========================
-// TOAST "ULTIMO SEGNALE"
+// TOAST ULTIMO SEGNALE
 // ========================
 const toast = document.createElement('div');
 toast.className = 'toast';
@@ -316,60 +504,147 @@ document.getElementById('sg-open').addEventListener('click', () => {
 document.getElementById('sg-close').addEventListener('click', () => toast.remove());
 
 // ========================
-// SUPABASE (NON BLOCCA IL SITO SE MANCA)
+// DASHBOARD / WINRATE
 // ========================
-try{
-  if (window.supabase){
-    const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
-    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
+const tbodySignals = document.getElementById('signals-body');
+const statWinrate  = document.getElementById('stat-winrate');
+const statWins     = document.getElementById('stat-wins');
+const statLosses   = document.getElementById('stat-losses');
+const statOpen     = document.getElementById('stat-open');
 
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-
-    // Test connessione
-    (async () => {
-      const { error } = await sb.from('signals').select('id').limit(1);
-      if (error) log("Supabase test error: "+error.message);
-      else log("Connessione OK a Supabase");
-    })();
-
-    // Carica ultimo segnale all'avvio
-    async function loadInitial(){
-      const { data, error } = await sb.from('signals')
-        .select('*')
-        .order('created_at', { ascending:false })
-        .limit(1);
-      if (error){
-        log("loadInitial error: "+error.message);
-        return;
-      }
-      if (data && data.length){
-        showSignal(data[0]);
-      }else{
-        log("Nessun segnale in tabella.");
-      }
-    }
-    loadInitial();
-
-    // Realtime INSERT
-    sb.channel('signals-feed')
-      .on('postgres_changes', { event:'INSERT', schema:'public', table:'signals' }, (payload) => {
-        log("Realtime INSERT ricevuto");
-        showSignal(payload.new);
-      })
-      .subscribe((status) => {
-        log("Realtime status: "+(status||'unknown'));
-      });
-
-  } else {
-    log("Supabase non disponibile (window.supabase mancante).");
-  }
-}catch(e){
-  log("Supabase init exception: "+(e.message||e));
+function formatDate(iso){
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleString('it-IT', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' });
 }
+
+function renderDashboardRows(rows){
+  tbodySignals.innerHTML = '';
+  let wins=0, losses=0, open=0;
+
+  (rows || []).forEach(r => {
+    const res = (r.result || '').toLowerCase();
+    if (res === 'win') wins++;
+    else if (res === 'loss') losses++;
+    else open++;
+
+    let badge;
+    if (res === 'win') badge = '<span class="badge badge-win">Win</span>';
+    else if (res === 'loss') badge = '<span class="badge badge-loss">Loss</span>';
+    else badge = '<span class="badge badge-open">Open</span>';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${formatDate(r.created_at)}</td>
+      <td>${r.symbol || ''}</td>
+      <td>${(r.side||'').toUpperCase()}</td>
+      <td>${(r.order_kind||'').toUpperCase()}</td>
+      <td>${r.entry ?? ''}</td>
+      <td>${r.sl ?? ''}</td>
+      <td>${r.tp ?? ''}</td>
+      <td>${badge}</td>
+    `;
+    tbodySignals.appendChild(tr);
+  });
+
+  const closed = wins + losses;
+  let wr = '—';
+  if (closed > 0){
+    wr = ((wins / closed) * 100).toFixed(1) + '%';
+  }
+
+  statWinrate.textContent = wr;
+  statWins.textContent    = wins;
+  statLosses.textContent  = losses;
+  statOpen.textContent    = open;
+}
+
+async function loadDashboard(){
+  try{
+    const { data, error } = await sb
+      .from('signals')
+      .select('*')
+      .order('created_at', { ascending:false })
+      .limit(50);
+
+    if (error){
+      log("loadDashboard error: "+error.message);
+      return;
+    }
+    renderDashboardRows(data || []);
+  }catch(e){
+    log("loadDashboard exception: "+(e.message||e));
+  }
+}
+
+// ========================
+// SUPABASE: ULTIMO SEGNALE + REALTIME
+// ========================
+async function loadInitialSignal(){
+  try{
+    const { data, error } = await sb
+      .from('signals')
+      .select('*')
+      .order('created_at', { ascending:false })
+      .limit(1);
+
+    if (error){
+      log("loadInitialSignal error: "+error.message);
+      return;
+    }
+    if (data && data.length){
+      showSignal(data[0]);
+    }else{
+      log("Nessun segnale in tabella.");
+    }
+  }catch(e){
+    log("loadInitialSignal exception: "+(e.message||e));
+  }
+}
+
+function setupRealtime(){
+  sb.channel('signals-feed')
+    .on('postgres_changes', { event:'INSERT', schema:'public', table:'signals' }, (payload) => {
+      log("Realtime INSERT ricevuto");
+      showSignal(payload.new);
+      loadDashboard();
+    })
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'signals' }, () => {
+      // update (per cancella hit / stop hit)
+      loadDashboard();
+    })
+    .subscribe((status) => {
+      log("Realtime status: "+(status||'unknown'));
+    });
+}
+
+// ========================
+// BOOTSTRAP
+// ========================
+(async () => {
+  initLevels();
+  await loadDashboard();
+  await loadInitialSignal();
+  setupRealtime();
+
+  try{
+    const { data } = await sb.auth.getSession();
+    if (data && data.session && data.session.user){
+      currentUserEmail = data.session.user.email;
+      showApp();
+    }else{
+      showLogin();
+    }
+  }catch(e){
+    console.error(e);
+    showLogin();
+  }
+})();
 </script>
 
 </body>
 </html>
+
 
 
 
