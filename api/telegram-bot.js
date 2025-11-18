@@ -18,7 +18,8 @@ function parseSignal(text) {
   if (!text) return null;
 
   const raw = text.trim();
-  const upper = raw.toUpperCase().replace(/,/g, '.');
+  const norm = raw.replace(/\r\n/g, '\n');
+  const upper = norm.toUpperCase().replace(/,/g, '.');
 
   // 1) Formato compatto su una riga
   //   Esempio:  SELL_LIMIT XAUUSD 4050 SL 4060 TP 4042.7
@@ -28,7 +29,7 @@ function parseSignal(text) {
   if (m) {
     const [, side, kindRaw, symbolRaw, entryRaw, slRaw, tpRaw] = m;
     return {
-      side: side,
+      side,
       order_kind: (kindRaw || 'MARKET').toUpperCase(),
       symbol: symbolRaw.replace(':', '').toUpperCase(),
       entry: toNumber(entryRaw),
@@ -43,26 +44,31 @@ function parseSignal(text) {
   //   Entry4005
   //   SL4995
   //   TP 4035
+
   const sideMatch = upper.match(/\b(BUY|SELL)\b/);
   if (!sideMatch) return null;
 
   const kindMatch = upper.match(/\b(LIMIT|STOP)\b/);
-  let symbolMatch = upper.match(/\b(XAUUSD|XAU\/USD|XAUUSDT|XAGUSD|EURUSD|BTCUSD|BTCUSDT)\b/);
 
-  const entryMatch = upper.match(/ENTRY\s*:?\s*([0-9.]+)/);
-  const slMatch = upper.match(/\bSL\s*:?\s*([0-9.]+)/);
-  const tpMatch = upper.match(/\bTP\s*:?\s*([0-9.]+)/);
+  // simbolo: cerchiamo nelle righe, ma se non c'è assumiamo XAUUSD (il tuo caso tipico)
+  let symbolMatch = upper.match(
+    /\b(XAUUSD|XAU\/USD|XAUUSDT|XAGUSD|EURUSD|BTCUSD|BTCUSDT)\b/
+  );
+
+  // qui diventiamo molto più tolleranti: qualsiasi cosa tra la parola e il numero
+  const entryMatch = upper.match(/ENTRY[^0-9]*([0-9.]+)/);
+  const slMatch    = upper.match(/\bSL[^0-9]*([0-9.]+)/);
+  const tpMatch    = upper.match(/\bTP[^0-9]*([0-9.]+)/);
 
   if (!entryMatch || !slMatch || !tpMatch) {
-    // non abbiamo abbastanza info
-    return null;
+    return null; // non abbiamo abbastanza info per un segnale
   }
 
   const side = sideMatch[1];
   const kind = (kindMatch?.[1] || 'MARKET').toUpperCase();
-
-  // se non trova il simbolo ma parliamo sempre di oro, di default XAUUSD
-  const symbol = symbolMatch ? symbolMatch[1].replace('/', '').toUpperCase() : 'XAUUSD';
+  const symbol = symbolMatch
+    ? symbolMatch[1].replace('/', '').toUpperCase()
+    : 'XAUUSD';
 
   return {
     side,
@@ -165,4 +171,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: e.message || String(e) });
   }
 }
+
 
