@@ -6,135 +6,268 @@
   <title>DR-Forexau — Grafico Oro</title>
   <style>
     html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto;background:#0b0f14;color:#fff}
-    .wrap{height:100%;display:flex;flex-direction:column}
+    .wrap{min-height:100%;display:flex;flex-direction:column;gap:16px}
     header{padding:12px 16px;border-bottom:1px solid #223}
-    .chart{flex:1}
-    select{background:#111;color:#fff;border:1px solid #334;border-radius:10px;padding:6px 10px}
-    .toast{position:fixed;right:16px;bottom:16px;z-index:9999;background:#0b0f14;border:1px solid #334;padding:12px 14px;border-radius:14px;min-width:260px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+    h3{margin:0}
+    .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    select{background:#111;border:1px solid #334;color:#fff;border-radius:10px;padding:6px 10px}
+    .card{background:#0e141b;border:1px solid #223;border-radius:16px;padding:12px}
+    .chart{height:70vh;min-height:420px}
     .muted{opacity:.8;font-size:12px}
-    button{padding:6px 10px;border-radius:10px;border:1px solid #334;background:#111;color:#fff;cursor:pointer}
+    .toast{
+      position:fixed;right:16px;bottom:16px;z-index:9999;
+      background:#0b0f14;border:1px solid #334;border-radius:14px;padding:12px 14px;
+      box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:360px
+    }
+    button{padding:8px 12px;border-radius:10px;border:1px solid #334;background:#111;color:#fff;cursor:pointer}
+    button:hover{background:#132}
+    .pill{display:inline-flex;align-items:center;border:1px solid #334;border-radius:999px;padding:2px 8px;font-size:12px;gap:6px}
+    .dot{width:8px;height:8px;border-radius:999px;background:#16a34a}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h3 style="margin:0">DR-Forexau — TradingView</h3>
-        <label>Simbolo:
-          <select id="symbol">
-            <option value="OANDA:XAUUSD">XAUUSD (OANDA)</option>
-            <option value="FX_IDC:XAUUSD">XAUUSD (FX_IDC)</option>
-            <option value="OANDA:XAGUSD">XAGUSD</option>
-            <option value="OANDA:EURUSD">EURUSD</option>
-          </select>
-        </label>
-      </div>
-    </header>
+<div class="wrap">
+
+  <header>
+    <div class="row" style="justify-content:space-between">
+      <h3>DR-Forexau — TradingView</h3>
+      <label>Simbolo:
+        <select id="symbol">
+          <option value="OANDA:XAUUSD">XAUUSD (OANDA)</option>
+          <option value="FX_IDC:XAUUSD">XAUUSD (FX_IDC)</option>
+          <option value="OANDA:XAGUSD">XAGUSD (Argento)</option>
+          <option value="OANDA:EURUSD">EURUSD</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <div class="card">
     <div id="tv" class="chart"></div>
   </div>
 
-  <!-- TradingView -->
-  <script src="https://s3.tradingview.com/tv.js"></script>
-  <!-- Supabase client -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <div class="card" style="padding:16px 16px 8px">
+    <div class="row" style="justify-content:space-between">
+      <h4 style="margin:0">Levels (Lightweight Charts)</h4>
+      <span class="pill"><span class="dot" id="pending-dot" style="background:#eab308"></span><span id="pending-label">Pendenti</span></span>
+    </div>
+    <div id="lwc_chart" style="height:420px;border:1px solid #223;border-radius:12px;margin-top:8px"></div>
+  </div>
 
-  <script>
-    // ✅ Chiavi Supabase
-    const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
-    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
+</div>
 
-    // ========== TRADINGVIEW ==========
-    let tvWidget;
-    function render(symbol){
-      document.getElementById('tv').innerHTML = '';
-      tvWidget = new TradingView.widget({
-        symbol,
-        interval: "15",
-        container_id: "tv",
-        autosize: true,
-        theme: "dark",
-        style: "1",
-        locale: "it",
-        withdateranges: true,
-        hide_side_toolbar: false,
-        hide_top_toolbar: false,
-        timezone: "Europe/Rome",
-      });
-    }
-    const sel = document.getElementById('symbol');
-    sel.addEventListener('change', e => render(e.target.value));
-    render(sel.value);
+<!-- TradingView public widget -->
+<script src="https://s3.tradingview.com/tv.js"></script>
+<!-- Supabase client -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Lightweight Charts -->
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 
-    // ========== SUPABASE ==========
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+<script>
+  // ================== CONFIG ==================
+  // Supabase (tuo progetto)
+  const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
 
-    // Banner “ultimo segnale”
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.innerHTML = `
-      <div class="muted" style="margin-bottom:6px">Ultimo segnale</div>
-      <div id="sg-line" style="font-weight:700">—</div>
-      <div id="sg-sub" class="muted">In attesa…</div>
-      <div style="margin-top:8px;display:flex;gap:8px">
-        <button id="sg-apply">Apri sul grafico</button>
-        <button id="sg-close">Chiudi</button>
-      </div>
-      <div id="diag" class="muted" style="margin-top:8px;font-size:11px;line-height:1.2"></div>
-    `;
-    document.body.appendChild(toast);
-    const elLine = toast.querySelector('#sg-line');
-    const elSub  = toast.querySelector('#sg-sub');
-    const elDiag = toast.querySelector('#diag');
+  // TwelveData (opzionale per caricare candele nel grafico levels)
+  const TD_API_KEY = ""; // <-- se vuoi le candele qui, metti la tua chiave; vuoto = solo linee
 
-    let last = null;
+  // Mappa simbolo TradingView -> TwelveData
+  function tdSymbol(tvCode){
+    const map = {
+      "OANDA:XAUUSD":"XAU/USD",
+      "FX_IDC:XAUUSD":"XAU/USD",
+      "OANDA:XAGUSD":"XAG/USD",
+      "OANDA:EURUSD":"EUR/USD",
+    };
+    return map[tvCode] || "XAU/USD";
+  }
 
-    // test connessione
-    (async () => {
-      try {
-        const { data, error } = await sb.from('signals').select('id').limit(1);
-        elDiag.textContent = error ? ('Errore SELECT: '+error.message) : 'Connessione OK';
-      } catch (e) { elDiag.textContent = 'Eccezione: '+(e.message||e); }
-    })();
-
-    async function loadInitial() {
-      const { data, error } = await sb
-        .from('signals')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1);
-      if (!error && data?.length) showSignal(data[0]);
-      if (error) elDiag.textContent = 'Errore loadInitial: '+error.message;
-    }
-
-    sb.channel('signals-feed')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'signals' }, (payload) => {
-        showSignal(payload.new);
-      })
-      .subscribe((status) => {
-        elDiag.textContent = (elDiag.textContent ? elDiag.textContent+' | ' : '') + 'Realtime: ' + status;
-      });
-
-    function showSignal(s) {
-      last = s;
-      const side = (s.side || '').toUpperCase();
-      const color = side === 'BUY' ? '#16a34a' : '#ef4444';
-      elLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry}`;
-      elSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
-    }
-
-    document.getElementById('sg-apply')?.addEventListener('click', () => {
-      if (!last) return;
-      const code = (last.symbol || 'XAUUSD').toUpperCase();
-      const preferred = code === 'XAUUSD' ? 'OANDA:XAUUSD'
-                    : code === 'XAGUSD' ? 'OANDA:XAGUSD'
-                    : code === 'EURUSD' ? 'OANDA:EURUSD'
-                    : 'OANDA:XAUUSD';
-      sel.value = preferred;
-      sel.dispatchEvent(new Event('change'));
+  // ================== TRADINGVIEW WIDGET ==================
+  let tvWidget;
+  function renderTV(symbol){
+    document.getElementById('tv').innerHTML = '';
+    tvWidget = new TradingView.widget({
+      symbol,
+      interval: "15",
+      container_id: "tv",
+      autosize: true,
+      theme: "dark",
+      style: "1",
+      locale: "it",
+      withdateranges: true,
+      hide_side_toolbar: false,
+      hide_top_toolbar: false,
+      timezone: "Europe/Rome",
     });
-    document.getElementById('sg-close')?.addEventListener('click', () => toast.remove());
+  }
+  const sel = document.getElementById('symbol');
+  sel.addEventListener('change', () => {
+    renderTV(sel.value);
+    loadCandles(tdSymbol(sel.value));
+  });
+  renderTV(sel.value);
 
-    loadInitial();
-  </script>
+  // ================== SUPABASE ==================
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  // piccolo toast “ultimo segnale”
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `
+    <div style="font-weight:700">Ultimo segnale</div>
+    <div id="sg-line" style="margin-top:4px"></div>
+    <div id="sg-sub" class="muted"></div>
+    <div class="row" style="margin-top:8px">
+      <button id="sg-open">Apri sul grafico</button>
+      <button id="sg-close" style="background:#1b0f0f;border-color:#442">Chiudi</button>
+    </div>
+    <div id="diag" class="muted" style="margin-top:8px;font-size:11px;line-height:1.2"></div>
+  `;
+  document.body.appendChild(toast);
+  const eLine = toast.querySelector('#sg-line');
+  const eSub  = toast.querySelector('#sg-sub');
+  const eDiag = toast.querySelector('#diag');
+
+  let last = null;
+
+  // test connessione
+  (async () => {
+    try {
+      const { data, error } = await sb.from('signals').select('id').limit(1);
+      eDiag.textContent = error ? ('Errore SELECT: '+error.message) : 'Connessione OK';
+    } catch (e) { eDiag.textContent = 'Eccezione: '+(e?.message||e); }
+  })();
+
+  // carica ultimo segnale
+  async function loadInitial() {
+    const { data, error } = await sb
+      .from('signals')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (!error && data?.length) showSignal(data[0]); else if (error) eDiag.textContent = 'Errore loadInitial: '+error.message;
+  }
+
+  // realtime INSERT
+  sb.channel('signals-feed')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'signals' }, (payload) => {
+      showSignal(payload.new);
+    })
+    .subscribe(({status}) => {
+      eDiag.textContent = (eDiag.textContent ? eDiag.textContent+' | ' : '') + 'Realtime: '+status;
+    });
+
+  // ================== LIGHTWEIGHT CHART (levels) ==================
+  const lwcEl = document.getElementById('lwc_chart');
+  const chart = LightweightCharts.createChart(lwcEl, {
+    layout: { background: { color: '#0b0f14' }, textColor: '#cbd5e1' },
+    rightPriceScale: { borderColor: '#1f2937' },
+    timeScale: { borderColor: '#1f2937' },
+    grid: { vertLines: { color: '#111827' }, horzLines: { color: '#111827' } },
+    crosshair: { mode: 1 },
+  });
+  const series = chart.addCandlestickSeries({
+    upColor: '#16a34a', downColor: '#ef4444', borderDownColor: '#ef4444',
+    borderUpColor: '#16a34a', wickDownColor: '#ef4444', wickUpColor: '#16a34a'
+  });
+  let priceLines = [];
+
+  async function loadCandles(symbolTD, interval="15min", size=300){
+    if (!TD_API_KEY) { series.setData([]); return; }
+    const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbolTD)}&interval=${interval}&outputsize=${size}&apikey=${TD_API_KEY}&format=JSON`;
+    try{
+      const r = await fetch(url); const j = await r.json();
+      if (!j?.values) return;
+      const data = j.values.map(v => ({
+        time: Math.floor(new Date(v.datetime).getTime()/1000),
+        open: +v.open, high: +v.high, low: +v.low, close: +v.close
+      })).reverse();
+      series.setData(data);
+      chart.timeScale().fitContent();
+    }catch(e){}
+  }
+  loadCandles(tdSymbol(sel.value));
+
+  function drawLevels(sig){
+    // rimuovi precedenti
+    priceLines.forEach(pl => series.removePriceLine(pl));
+    priceLines = [];
+
+    const kind = (sig.order_kind || 'market').toLowerCase();      // market | limit | stop
+    const isPending = !sig.filled_at && (kind==='limit' || kind==='stop');
+
+    const entryStyle = isPending ? LightweightCharts.LineStyle.Dotted : LightweightCharts.LineStyle.Solid;
+    const entryColor = isPending ? '#eab308' : '#22c55e';
+    const slColor = '#ef4444';
+    const tpColor = '#16a34a';
+
+    if (Number.isFinite(sig.entry)){
+      priceLines.push(series.createPriceLine({
+        price: Number(sig.entry),
+        color: entryColor,
+        lineWidth: 2,
+        lineStyle: entryStyle,
+        title: `ENTRY ${sig.entry}${isPending?' (pend.)':''}`
+      }));
+    }
+    if (Number.isFinite(sig.sl)){
+      priceLines.push(series.createPriceLine({
+        price: Number(sig.sl),
+        color: slColor,
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Solid,
+        title: `SL ${sig.sl}`
+      }));
+    }
+    if (Number.isFinite(sig.tp)){
+      priceLines.push(series.createPriceLine({
+        price: Number(sig.tp),
+        color: tpColor,
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Solid,
+        title: `TP ${sig.tp}`
+      }));
+    }
+
+    // badge pendenti
+    const dot = document.getElementById('pending-dot');
+    const label = document.getElementById('pending-label');
+    if (isPending){ dot.style.background = '#eab308'; label.textContent = 'Pendente'; }
+    else { dot.style.background = '#16a34a'; label.textContent = 'Attivo/Market'; }
+  }
+
+  // ================== UI “ultimo segnale” ==================
+  function showSignal(s){
+    last = s;
+    const side = (s.side||'').toUpperCase();
+    const color = side === 'BUY' ? '#16a34a' : '#ef4444';
+    const kind = (s.order_kind || 'market').toUpperCase();
+
+    eLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry} <span class="muted">(${kind})</span>`;
+    eSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
+
+    // aggiorna levels
+    drawLevels(s);
+  }
+
+  // “Apri sul grafico” → allinea TradingView al simbolo dell’ultimo segnale
+  document.getElementById('sg-open').addEventListener('click', () => {
+    if (!last) return;
+    const code = (last.symbol || 'XAUUSD').toUpperCase();
+    const preferred =
+        code === 'XAUUSD' ? 'OANDA:XAUUSD' :
+        code === 'XAGUSD' ? 'OANDA:XAGUSD' :
+        code === 'EURUSD' ? 'OANDA:EURUSD' :
+        'OANDA:XAUUSD';
+    sel.value = preferred;
+    sel.dispatchEvent(new Event('change'));
+  });
+  document.getElementById('sg-close').addEventListener('click', () => toast.remove());
+
+  // bootstrap
+  loadInitial();
+</script>
 </body>
 </html>
+
