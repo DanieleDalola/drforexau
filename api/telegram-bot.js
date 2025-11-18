@@ -1,106 +1,100 @@
-// api/telegram-bot.js
-// Endpoint webhook Telegram -> Supabase REST
+// ================================
+// TELEGRAM BOT WEBHOOK (VERCEL)
+// ================================
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE
+);
+
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const API_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 
 export default async function handler(req, res) {
-  // Telegram manda SOLO POST
-  if (req.method !== "POST") {
-    return res.status(200).json({ ok: true });
-  }
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
-
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
-    console.error("Missing Supabase env vars");
-    return res.status(500).json({ ok: false, error: "Server not configured" });
-  }
-
   try {
-    const update = req.body || {};
-    const msg = update.message || update.channel_post;
-
-    if (!msg || !msg.text) {
-      // Nessun testo da parsare (stickers, foto, ecc.)
+    if (req.method !== "POST") {
       return res.status(200).json({ ok: true });
     }
 
-    const rawText = msg.text.trim();
-    const text = rawText.toUpperCase();
+    const update = req.body;
 
-    // Formato atteso, esempi:
-    // BUY XAUUSD 3290 SL 3280 TP 3305
-    // SELL_LIMIT XAUUSD 4050 SL 4060 TP 4042.7
-    const re =
-      /^(BUY|SELL|BUY_LIMIT|SELL_LIMIT|BUY_STOP|SELL_STOP)\s+([A-Z]+)\s+(\d+(?:\.\d+)?)\s+SL\s+(\d+(?:\.\d+)?)\s+TP\s+(\d+(?:\.\d+)?)/;
+    // Messaggio arrivato su Telegram
+    if (!update.message || !update.message.text) {
+      return res.status(200).send("no-message");
+    }
 
-    const m = text.match(re);
+    const chatId = update.message.chat.id;
+    const text = update.message.text.trim();
 
-    if (!m) {
-      console.log("Messaggio non riconosciuto:", rawText);
-      // Rispondiamo “ok” uguale, altrimenti Telegram continua a riprovare
+    // ==========================
+    // 1) Comando: /start
+    // ==========================
+    if (text === "/start") {
+      await sendMessage(chatId,
+        "👋 Benvenuto! Invia un segnale nel formato:\n\n" +
+        "`BUY XAUUSD 3290 SL 3280 TP 3305`\n" +
+        "`SELL_LIMIT XAUUSD 4050 SL 4060 TP 4042.7`"
+      );
       return res.status(200).json({ ok: true });
     }
 
-    let rawSide = m[1];     // es. BUY, SELL_LIMIT, BUY_STOP
-    const symbol = m[2];    // es. XAUUSD
-    const entry = Number(m[3]);
-    const sl = Number(m[4]);
-    const tp = Number(m[5]);
+    // ==========================
+    // 2) PARSING SEGNALI
+    // ==========================
+    const match = text.match(
+      /(BUY|SELL|BUY_LIMIT|SELL_LIMIT|BUY_STOP|SELL_STOP)\s+([A-Z]+)\s+([\d.]+)\s+SL\s+([\d.]+)\s+TP\s+([\d.]+)/
+    );
 
-    let order_kind = "market"; // market | limit | stop
-    let side = rawSide;
-
-    if (rawSide.endsWith("_LIMIT")) {
-      order_kind = "limit";
-      side = rawSide.replace("_LIMIT", "");
-    } else if (rawSide.endsWith("_STOP")) {
-      order_kind = "stop";
-      side = rawSide.replace("_STOP", "");
+    if (!match) {
+      await sendMessage(chatId, "❌ Formato non riconosciuto.");
+      return res.status(200).json({ ok: true });
     }
 
-    side = side.toUpperCase(); // BUY / SELL
+    const [, rawSide, symbol, entry, sl, tp] = match;
 
-    const status = order_kind === "market" ? "open" : "pending";
+    // tipo di ordine
+    const side = rawSide.includes("BUY") ? "BUY" : "SELL";
+    const orderKind = rawSide.includes("LIMIT")
+      ? "limit"
+      : rawSide.includes("STOP")
+      ? "stop"
+      : "market";
 
-    const payload = {
-      source: "telegram",
-      symbol,
+    // ==========================
+    // 3) SALVA SU SUPABASE
+    // ==========================
+    const { error } = await supabase.from("signals").insert({
       side,
+      symbol,
       entry,
       sl,
       tp,
-      status,
-      order_kind,
-      raw_text: rawText,
-    };
-
-    console.log("Saving signal:", payload);
-
-    // Insert via Supabase REST API
-    const resp = await fetch(`${SUPABASE_URL}/rest/v1/signals`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: SUPABASE_SERVICE_ROLE,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE}`,
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify(payload),
+      order_kind: orderKind,
     });
 
-    const data = await resp.json();
-
-    if (!resp.ok) {
-      console.error("Supabase error:", data);
-      return res.status(500).json({ ok: false, error: "Supabase insert failed" });
+    if (error) {
+      await sendMessage(chatId, "❌ Errore Supabase: " + error.message);
+    } else {
+      await sendMessage(chatId, "✅ Segnale salvato e inviato alla dashboard!");
     }
 
-    console.log("Supabase insert ok:", data);
+    return res.status(200).json({ ok: true });
 
-    // Risposta per Telegram
-    return res.status(200).json({ ok: true });
-  } catch (e) {
-    console.error("Handler error:", e);
-    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message });
   }
+}
+
+// =========================
+// SEND MESSAGE TO TELEGRAM
+// =========================
+async function sendMessage(chatId, text) {
+  await fetch(`${API_URL}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+  });
 }
