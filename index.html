@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>DR-Forexau – Dashboard</title>
 
-  <!-- PWA / ICONS -->
+  <!-- PWA -->
   <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0b0f14">
+
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-512.png">
-  <meta name="theme-color" content="#0b0f14">
 
   <style>
     html,body{
@@ -150,8 +151,6 @@
       background:#111827;
       color:#e5e7eb;
     }
-
-    /* Bottone install PWA */
     .install-btn {
       margin-top: 10px;
       padding: 8px 14px;
@@ -165,19 +164,13 @@
       gap: 6px;
       cursor: pointer;
     }
-    .install-btn span {
-      font-size: 16px;
-    }
-    .install-btn:hover {
-      background: #0f172a;
-    }
-    .install-btn.hidden {
-      display: none;
-    }
+    .install-btn span { font-size: 16px; }
+    .install-btn:hover { background: #0f172a; }
+    .install-btn.hidden { display: none; }
   </style>
 
-  <!-- Registrazione service worker -->
   <script>
+    // Service worker PWA
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/service-worker.js')
@@ -234,11 +227,6 @@
           </select>
         </label>
         <button id="logout-btn" type="button">Logout</button>
-
-        <!-- Pulsante install PWA -->
-        <button id="install-btn" class="install-btn hidden" type="button">
-          <span>⬇️</span> Installa app
-        </button>
       </div>
     </div>
   </header>
@@ -304,22 +292,17 @@
 
 <script>
 // ========================
-// LOGGER
+// CONFIG / LOGGER
 // ========================
-function log(msg){
-  console.log(msg);
-}
+function log(msg){ console.log(msg); }
 
-// ========================
-// SUPABASE CLIENT
-// ========================
 const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ========================
-// AUTH DOM
+// DOM AUTH
 // ========================
 const authView        = document.getElementById('auth-view');
 const appView         = document.getElementById('app-view');
@@ -331,19 +314,72 @@ const userEmailLabel  = document.getElementById('user-email-label');
 const logoutBtn       = document.getElementById('logout-btn');
 
 let currentUserEmail = '';
+let appInitialized   = false;
 
+// ========================
+// TOAST (creato solo dopo login)
+// ========================
+let toast = null;
+let eLine = null;
+let eSub  = null;
+let lastSignal = null;
+
+function ensureToast(){
+  if (toast) return;
+  toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `
+    <div style="font-weight:700">Ultimo segnale</div>
+    <div id="sg-line" style="margin-top:4px"></div>
+    <div id="sg-sub" class="muted"></div>
+    <div class="row" style="margin-top:8px">
+      <button id="sg-open">Apri sul grafico</button>
+      <button id="sg-close" style="background:#1b0f0f;border-color:#442">Chiudi</button>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  eLine = toast.querySelector('#sg-line');
+  eSub  = toast.querySelector('#sg-sub');
+
+  document.getElementById('sg-open').addEventListener('click', () => {
+    try{
+      if (!lastSignal) return;
+      const code = (lastSignal.symbol || 'XAUUSD').toUpperCase();
+      const preferred =
+        code === 'XAUUSD' ? 'OANDA:XAUUSD' :
+        code === 'XAGUSD' ? 'OANDA:XAGUSD' :
+        code === 'EURUSD' ? 'OANDA:EURUSD' : 'OANDA:XAUUSD';
+      sel.value = preferred;
+      sel.dispatchEvent(new Event('change'));
+    }catch(e){
+      log("sg-open error: "+(e.message||e));
+    }
+  });
+
+  document.getElementById('sg-close').addEventListener('click', () => {
+    if (toast) toast.style.display = 'none';
+  });
+}
+
+// ========================
+// FUNZIONI VIEW
+// ========================
 function showApp(){
   authView.style.display = 'none';
   appView.style.display  = 'flex';
   userEmailLabel.textContent = currentUserEmail ? `(${currentUserEmail})` : '';
+  initAppOnce();
 }
 
 function showLogin(){
   authView.style.display = 'flex';
   appView.style.display  = 'none';
-  loginMsg.textContent = '';
+  loginMsg.textContent   = '';
 }
 
+// ========================
+// LOGIN / LOGOUT
+// ========================
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   loginMsg.textContent = 'Accesso in corso...';
@@ -352,10 +388,8 @@ loginForm.addEventListener('submit', async (e) => {
   const password = passwordInput.value;
 
   try{
-    // prima proviamo login
     let { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error && error.message && error.message.includes('Invalid login credentials')) {
-      // se utente non esiste, lo creiamo
       const signUp = await sb.auth.signUp({ email, password });
       if (signUp.error) throw signUp.error;
       data = signUp.data;
@@ -411,10 +445,9 @@ function renderTV(symbol){
 }
 
 sel.addEventListener('change', () => renderTV(sel.value));
-renderTV(sel.value);
 
 // ========================
-// LEVELS (LIGHTWEIGHT CHARTS)
+// LEVELS CHART
 // ========================
 let chart, series, priceLines = [];
 
@@ -497,60 +530,6 @@ function drawLevels(sig){
 }
 
 // ========================
-// TOAST ULTIMO SEGNALE
-// ========================
-const toast = document.createElement('div');
-toast.className = 'toast';
-toast.innerHTML = `
-  <div style="font-weight:700">Ultimo segnale</div>
-  <div id="sg-line" style="margin-top:4px"></div>
-  <div id="sg-sub" class="muted"></div>
-  <div class="row" style="margin-top:8px">
-    <button id="sg-open">Apri sul grafico</button>
-    <button id="sg-close" style="background:#1b0f0f;border-color:#442">Chiudi</button>
-  </div>
-`;
-document.body.appendChild(toast);
-
-const eLine = toast.querySelector('#sg-line');
-const eSub  = toast.querySelector('#sg-sub');
-let lastSignal = null;
-
-function showSignal(s){
-  try{
-    lastSignal = s;
-    const side = (s.side||'').toUpperCase();
-    const color = side === 'BUY' ? '#16a34a' : '#ef4444';
-    const kind = (s.order_kind||'market').toUpperCase();
-
-    eLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry} <span class="muted">(${kind})</span>`;
-    eSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
-
-    drawLevels(s);
-    log("Mostrato ultimo segnale.");
-  }catch(e){
-    log("showSignal error: "+(e.message||e));
-  }
-}
-
-document.getElementById('sg-open').addEventListener('click', () => {
-  try{
-    if (!lastSignal) return;
-    const code = (lastSignal.symbol || 'XAUUSD').toUpperCase();
-    const preferred =
-      code === 'XAUUSD' ? 'OANDA:XAUUSD' :
-      code === 'XAGUSD' ? 'OANDA:XAGUSD' :
-      code === 'EURUSD' ? 'OANDA:EURUSD' : 'OANDA:XAUUSD';
-    sel.value = preferred;
-    sel.dispatchEvent(new Event('change'));
-  }catch(e){
-    log("sg-open error: "+(e.message||e));
-  }
-});
-
-document.getElementById('sg-close').addEventListener('click', () => toast.remove());
-
-// ========================
 // DASHBOARD / WINRATE
 // ========================
 const tbodySignals = document.getElementById('signals-body');
@@ -576,9 +555,9 @@ function renderDashboardRows(rows){
     else open++;
 
     let badge;
-    if (res === 'win') badge = '<span class="badge badge-win">Win</span>';
+    if (res === 'win')      badge = '<span class="badge badge-win">Win</span>';
     else if (res === 'loss') badge = '<span class="badge badge-loss">Loss</span>';
-    else badge = '<span class="badge badge-open">Open</span>';
+    else                     badge = '<span class="badge badge-open">Open</span>';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -625,8 +604,28 @@ async function loadDashboard(){
 }
 
 // ========================
-// SUPABASE: ULTIMO SEGNALE + REALTIME
+// SEGNALE CORRENTE + REALTIME
 // ========================
+function showSignal(s){
+  try{
+    ensureToast();
+    toast.style.display = 'block';
+
+    lastSignal = s;
+    const side = (s.side||'').toUpperCase();
+    const color = side === 'BUY' ? '#16a34a' : '#ef4444';
+    const kind = (s.order_kind||'market').toUpperCase();
+
+    eLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry} <span class="muted">(${kind})</span>`;
+    eSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
+
+    drawLevels(s);
+    log("Mostrato ultimo segnale.");
+  }catch(e){
+    log("showSignal error: "+(e.message||e));
+  }
+}
+
 async function loadInitialSignal(){
   try{
     const { data, error } = await sb
@@ -657,7 +656,6 @@ function setupRealtime(){
       loadDashboard();
     })
     .on('postgres_changes', { event:'UPDATE', schema:'public', table:'signals' }, () => {
-      // update (per cancella / hit / stop hit)
       loadDashboard();
     })
     .subscribe((status) => {
@@ -666,51 +664,23 @@ function setupRealtime(){
 }
 
 // ========================
-// PWA INSTALL BUTTON
+// INIZIALIZZAZIONE APP DOPO LOGIN
 // ========================
-let deferredPrompt;
-const installBtn = document.getElementById('install-btn');
+function initAppOnce(){
+  if (appInitialized) return;
+  appInitialized = true;
 
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-
-  if (installBtn) {
-    installBtn.classList.remove('hidden');
-  }
-});
-
-if (installBtn) {
-  installBtn.addEventListener('click', async () => {
-    try {
-      if (!deferredPrompt) return;
-
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-
-      if (outcome === 'accepted') {
-        console.log('Utente ha installato la PWA');
-      } else {
-        console.log('Utente ha rifiutato la PWA');
-      }
-
-      deferredPrompt = null;
-      installBtn.classList.add('hidden');
-    } catch (err) {
-      console.error('Errore install PWA', err);
-    }
-  });
+  initLevels();
+  renderTV(sel.value);
+  loadDashboard();
+  loadInitialSignal();
+  setupRealtime();
 }
 
 // ========================
-// BOOTSTRAP
+// BOOTSTRAP: controlla sessione
 // ========================
 (async () => {
-  initLevels();
-  await loadDashboard();
-  await loadInitialSignal();
-  setupRealtime();
-
   try{
     const { data } = await sb.auth.getSession();
     if (data && data.session && data.session.user){
@@ -728,6 +698,7 @@ if (installBtn) {
 
 </body>
 </html>
+
 
 
 
