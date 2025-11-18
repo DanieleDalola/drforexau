@@ -60,6 +60,7 @@
 <script src="https://s3.tradingview.com/tv.js"></script>
 <!-- Supabase client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 <!-- Lightweight Charts -->
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 
@@ -86,6 +87,59 @@
   // ================== TRADINGVIEW WIDGET ==================
   let tvWidget;
   function renderTV(symbol){
+    // ====== LEVELS CHART (Lightweight Charts) ======
+let lwChart, baseSeries, priceLines = [];
+
+function initLevelsChart() {
+  const el = document.getElementById('levels');
+  if (!el) return;
+  el.innerHTML = '';
+
+  lwChart = LightweightCharts.createChart(el, {
+    height: 280,
+    layout: { background: { color: '#0b0f14' }, textColor: '#fff' },
+    grid: { vertLines: { visible: false }, horzLines: { color: '#1f2a35' } },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { visible: false },
+  });
+
+  baseSeries = lwChart.addLineSeries({ color: '#999', visible: false });
+}
+
+function renderLevels(s) {
+  if (!lwChart) initLevelsChart();
+  if (!baseSeries) return;
+
+  priceLines.forEach(l => baseSeries.removePriceLine(l));
+  priceLines = [];
+
+  const side = (s.side || '').toUpperCase();
+  const isPending = (s.status || '').toLowerCase() === 'pending';
+
+  const colorEntry = isPending ? '#f1c40f' : (side.includes('BUY') ? '#16a34a' : '#ef4444');
+  const colorSL    = isPending ? '#f1c40f' : '#ef4444';
+  const colorTP    = isPending ? '#f1c40f' : '#16a34a';
+
+  const toNum = v => (v == null ? null : Number(v));
+
+  const entry = toNum(s.entry);
+  const sl    = toNum(s.sl);
+  const tp    = toNum(s.tp);
+
+  if (entry) priceLines.push(baseSeries.createPriceLine({
+    price: entry, color: colorEntry, lineWidth: 2,
+    lineStyle: LightweightCharts.LineStyle.Solid, title: `ENTRY ${entry}`
+  }));
+  if (sl) priceLines.push(baseSeries.createPriceLine({
+    price: sl, color: colorSL, lineWidth: 1,
+    lineStyle: LightweightCharts.LineStyle.Dotted, title: `SL ${sl}`
+  }));
+  if (tp) priceLines.push(baseSeries.createPriceLine({
+    price: tp, color: colorTP, lineWidth: 1,
+    lineStyle: LightweightCharts.LineStyle.Dotted, title: `TP ${tp}`
+  }));
+}
+
     document.getElementById('tv').innerHTML = '';
     tvWidget = new TradingView.widget({
       symbol,
@@ -246,6 +300,8 @@
 
     eLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry} <span class="muted">(${kind})</span>`;
     eSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
+    renderLevels(s);
+
 
     // aggiorna levels
     drawLevels(s);
