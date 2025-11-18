@@ -1,225 +1,267 @@
-// api/telegram-bot.js
+// /api/telegram-bot.js
+const { createClient } = require("@supabase/supabase-js");
 
-const TELEGRAM_TOKEN          = process.env.TELEGRAM_BOT_TOKEN;
-const SUPABASE_URL            = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE   = process.env.SUPABASE_SERVICE_ROLE;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
 
-async function callTelegram(method, payload) {
-  const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/${method}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type':'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    console.error('Telegram API error:', data);
-  }
-  return data;
-}
+const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
 
-async function supabaseRequest(path, method = 'GET', body) {
-  const url = `${SUPABASE_URL}/rest/v1/${path}`;
-  const headers = {
-    apikey: SUPABASE_SERVICE_ROLE,
-    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE}`,
-  };
-  if (method !== 'GET') {
-    headers['Content-Type'] = 'application/json';
-    headers['Prefer'] = 'return=representation';
-  }
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    console.error('Supabase error', res.status, text);
-    throw new Error(text);
+// ----------------- UTILS TELEGRAM -----------------
+async function sendTelegramMessage(chatId, text) {
+  if (!TELEGRAM_TOKEN) {
+    console.error("TELEGRAM_BOT_TOKEN mancante");
+    return;
   }
   try {
-    return text ? JSON.parse(text) : null;
-  } catch {
-    return null;
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    });
+  } catch (err) {
+    console.error("Errore sendTelegramMessage:", err);
   }
 }
 
-// =====================
-// PARSING SEGNALI
-// =====================
-function parseSignal(textRaw) {
-  if (!textRaw) return null;
+// ----------------- PARSER SEGNALI -----------------
+function parseSignal(text) {
+  if (!text) return null;
 
-  // normalizza: spazi, underscore -> spazio, maiuscolo
-  let t = textRaw.replace(/\s+/g, ' ').replace(/_/g, ' ').trim().toUpperCase();
+  // Normalizzo: tolgo newline, underscore, doppie spaziature, uppercase
+  let norm = text.replace(/[\n\r]+/g, " ");
+  norm = norm.replace(/_/g, " ");
+  norm = norm.replace(/\s+/g, " ").trim().toUpperCase();
 
-  // es: "BUY LIMIT XAUUSD 4005 SL 3995 TP 4035"
-  //     "SELL NOW XAUUSD 4040 SL 4050 TP 4005"
-  const re = /(BUY|SELL)\s+(LIMIT|STOP|NOW)\s+([A-Z0-9/]+)\s+([0-9]+(?:\.[0-9]+)?)(?:\s+SL\s+([0-9]+(?:\.[0-9]+)?))?(?:\s+TP\s+([0-9]+(?:\.[0-9]+)?))?/;
-  const m = t.match(re);
+  const sideMatch = norm.match(/\b(BUY|SELL)\b/);
+  if (!sideMatch) return null;
+  const side = sideMatch[1];
+
+  let orderKind = "market";
+  if (/\bLIMIT\b/.test(norm)) orderKind = "limit";
+  else if (/\bSTOP\b/.test(norm)) orderKind = "stop";
+  else if (/\bNOW\b/.test(norm)) orderKind = "market";
+
+  let symbol = "XAUUSD";
+  const symMatch = norm.match(/\b(XAUUSD|XAGUSD|EURUSD)\b/);
+  if (symMatch) symbol = symMatch[1];
+
+  // ENTRY: prima provo "ENTRY 4005", poi "ENTRY4005"
+  let entry = null;
+  let m = norm.match(/\bENTRY\s*([0-9]+(?:\.[0-9]+)?)\b/);
+  if (!m) m = norm.match(/\bENTRY([0-9]+(?:\.[0-9]+)?)\b/);
+  if (!m) {
+    // Se non c'è ENTRY, prendo il numero dopo il simbolo
+    const reAfterSymbol = new RegExp(
+      symbol + "\\s*([0-9]+(?:\\.[0-9]+)?)"
+    );
+    m = norm.match(reAfterSymbol);
+  }
   if (!m) return null;
+  entry = Number(m[1]);
 
-  const side = m[1];          // BUY / SELL
-  const kindWord = m[2];      // LIMIT / STOP / NOW
-  const symbol = m[3];        // XAUUSD
-  const entry  = parseFloat(m[4]);
-  const sl     = m[5] ? parseFloat(m[5]) : null;
-  const tp     = m[6] ? parseFloat(m[6]) : null;
+  // SL / TP
+  let sl = null;
+  let tp = null;
+  let slMatch = norm.match(/\bSL\s*([0-9]+(?:\.[0-9]+)?)\b/);
+  if (!slMatch) slMatch = norm.match(/\bSL([0-9]+(?:\.[0-9]+)?)\b/);
+  if (slMatch) sl = Number(slMatch[1]);
 
-  let orderKind = 'market';
-  if (kindWord === 'LIMIT') orderKind = 'limit';
-  else if (kindWord === 'STOP') orderKind = 'stop';
+  let tpMatch = norm.match(/\bTP\s*([0-9]+(?:\.[0-9]+)?)\b/);
+  if (!tpMatch) tpMatch = norm.match(/\bTP([0-9]+(?:\.[0-9]+)?)\b/);
+  if (tpMatch) tp = Number(tpMatch[1]);
 
-  return { side, order_kind: orderKind, symbol, entry, sl, tp };
-}
-
-// segna ultimo segnale aperto (result IS NULL) come win/loss
-async function markLastResult(result) {
-  const rows = await supabaseRequest(
-    'signals?select=id&result=is.null&order=created_at.desc&limit=1',
-    'GET'
-  );
-  if (!rows || !rows.length) return false;
-
-  const id = rows[0].id;
-  await supabaseRequest(`signals?id=eq.${id}`, 'PATCH', { result });
-  return true;
-}
-
-// cancella l'ultimo segnale (indipendentemente dal result)
-async function deleteLastSignal() {
-  const rows = await supabaseRequest(
-    'signals?select=id&order=created_at.desc&limit=1',
-    'GET'
-  );
-  if (!rows || !rows.length) return false;
-
-  const id = rows[0].id;
-  await supabaseRequest(`signals?id=eq.${id}`, 'DELETE');
-  return true;
-}
-
-// =====================
-// HANDLER PRINCIPALE
-// =====================
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(200).json({ ok: true });
+  if (!entry || !sl || !tp) {
+    return null; // non salvo segnali incompleti
   }
 
-  const update = req.body;
-  const msg = update.message || update.channel_post;
-  if (!msg || !msg.text) {
-    return res.status(200).json({ ok: true });
+  return {
+    side,
+    order_kind: orderKind,
+    symbol,
+    entry,
+    sl,
+    tp,
+    raw_text: text,
+  };
+}
+
+// ----------------- COMANDI GESTIONE -----------------
+async function deleteLastSignal(chatId) {
+  const { data, error } = await sb
+    .from("signals")
+    .select("id")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error("Errore SELECT last for delete:", error);
+    await sendTelegramMessage(
+      chatId,
+      "❌ Errore interno bot (delete)."
+    );
+    return;
+  }
+  if (!data || !data.length) {
+    await sendTelegramMessage(chatId, "ℹ️ Nessun segnale da cancellare.");
+    return;
   }
 
-  const chatId = msg.chat.id;
-  const text   = msg.text.trim();
-  const lower  = text.toLowerCase();
+  const lastId = data[0].id;
+  const { error: delErr } = await sb
+    .from("signals")
+    .delete()
+    .eq("id", lastId);
+
+  if (delErr) {
+    console.error("Errore delete:", delErr);
+    await sendTelegramMessage(
+      chatId,
+      "❌ Errore interno bot durante la cancellazione."
+    );
+  } else {
+    await sendTelegramMessage(chatId, "✅ Ultimo segnale cancellato.");
+  }
+}
+
+async function setLastSignalResult(chatId, result) {
+  // result: 'win' o 'loss'
+  const { data, error } = await sb
+    .from("signals")
+    .select("id")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error("Errore SELECT last for result:", error);
+    await sendTelegramMessage(
+      chatId,
+      "❌ Errore interno bot (result)."
+    );
+    return;
+  }
+  if (!data || !data.length) {
+    await sendTelegramMessage(chatId, "ℹ️ Nessun segnale da aggiornare.");
+    return;
+  }
+
+  const lastId = data[0].id;
+  const { error: updErr } = await sb
+    .from("signals")
+    .update({ result })
+    .eq("id", lastId);
+
+  if (updErr) {
+    console.error("Errore update result:", updErr);
+    await sendTelegramMessage(
+      chatId,
+      "❌ Errore interno bot durante l'aggiornamento del risultato."
+    );
+  } else {
+    const label = result === "win" ? "vinto ✅" : "perso ❌";
+    await sendTelegramMessage(
+      chatId,
+      `📊 Ultimo segnale segnato come ${label}.`
+    );
+  }
+}
+
+// ----------------- HANDLER PRINCIPALE -----------------
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(200).json({ ok: true });
+  }
 
   try {
-    // 1) COMANDI BASE
-    if (lower === '/start' || lower === '/start@drforexausignalsbot') {
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text: 'Ciao, sono il bot DR-Forexau.\n\nFormato segnali:\nBUY LIMIT XAUUSD 4005 SL 3995 TP 4035\nSELL STOP XAUUSD 3990 SL 4010 TP 3950\n\nComandi:\n- "hit" ➜ segna ultimo segnale aperto come WIN\n- "stop hit" ➜ segna ultimo segnale aperto come LOSS\n- "cancella" ➜ elimina ultimo segnale',
-      });
+    const update = req.body;
+    const msg = update.message || update.channel_post;
+    if (!msg || !msg.text) {
       return res.status(200).json({ ok: true });
     }
 
-    if (lower === '/test') {
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text: '✅ Bot attivo e collegato alla dashboard.',
-      });
+    const chatId = msg.chat.id;
+    const text = msg.text.trim();
+    const lower = text.toLowerCase();
+
+    // /start
+    if (lower.startsWith("/start")) {
+      await sendTelegramMessage(
+        chatId,
+        "👋 Ciao! Inoltra qui i tuoi segnali XAUUSD.\n" +
+          "Esempi riconosciuti:\n" +
+          "• SELL_LIMIT XAUUSD 4050 SL 4060 TP 4042.7\n" +
+          "• Buy limit xauusd 4005 SL3995 TP4035\n" +
+          "• Sell stop xauusd\\nEntry4040\\nSL4050\\nTP4030\n\n" +
+          "Comandi:\n" +
+          "• 'cancella' → cancella l'ultimo segnale\n" +
+          "• 'hit' → segna l'ultimo segnale come vinto\n" +
+          "• 'stop hit' → segna l'ultimo segnale come perso"
+      );
       return res.status(200).json({ ok: true });
     }
 
-    // 2) GESTIONE RISULTATI
-    // "hit" -> WIN
-    if (lower === 'hit' || lower.includes('tp hit')) {
-      const ok = await markLastResult('win');
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text: ok
-          ? '✅ Ultimo segnale segnato come WIN (hit).'
-          : '⚠️ Nessun segnale aperto da segnare come WIN.',
-      });
+    // COMANDI TESTUALI
+    if (lower === "cancella" || lower === "cancel") {
+      await deleteLastSignal(chatId);
       return res.status(200).json({ ok: true });
     }
 
-    // "stop hit" -> LOSS
-    if (lower.includes('stop hit')) {
-      const ok = await markLastResult('loss');
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text: ok
-          ? '⚠️ Ultimo segnale segnato come LOSS (stop hit).'
-          : '⚠️ Nessun segnale aperto da segnare come LOSS.',
-      });
+    if (lower === "hit" || lower === "tp hit") {
+      await setLastSignalResult(chatId, "win");
       return res.status(200).json({ ok: true });
     }
 
-    // "cancella" -> cancella ultimo segnale
-    if (lower === 'cancella' || lower.startsWith('cancella ')) {
-      const ok = await deleteLastSignal();
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text: ok
-          ? '🗑️ Ultimo segnale cancellato dalla dashboard.'
-          : '⚠️ Nessun segnale da cancellare.',
-      });
+    if (lower === "stop hit" || lower === "sl hit") {
+      await setLastSignalResult(chatId, "loss");
       return res.status(200).json({ ok: true });
     }
 
-    // 3) SEGNALI OPERATIVI
+    // PROVO A PARSARE COME SEGNALE
     const parsed = parseSignal(text);
+
     if (!parsed) {
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text: '⚠️ Non ho riconosciuto questo come segnale.\n\nTesto ricevuto:\n' + text,
-      });
+      await sendTelegramMessage(
+        chatId,
+        "⚠️ Non ho riconosciuto questo come segnale.\n\nTesto ricevuto:\n" +
+          text
+      );
       return res.status(200).json({ ok: true });
     }
 
-    const row = {
-      symbol: parsed.symbol,
+    // Salvo su Supabase
+    const { error: insErr } = await sb.from("signals").insert({
       side: parsed.side,
       order_kind: parsed.order_kind,
+      symbol: parsed.symbol,
       entry: parsed.entry,
       sl: parsed.sl,
       tp: parsed.tp,
-      result: null,         // aperto finché non mandi "hit" o "stop hit"
-      raw_text: text,
-    };
-
-    await supabaseRequest('signals', 'POST', row);
-
-    await callTelegram('sendMessage', {
-      chat_id: chatId,
-      parse_mode: 'HTML',
-      text:
-        '✅ Segnale registrato:\n' +
-        `<b>${parsed.side} ${parsed.order_kind.toUpperCase()} ${parsed.symbol}</b>\n` +
-        `Entry: <b>${parsed.entry}</b>\n` +
-        `SL: <b>${parsed.sl ?? '—'}</b> · TP: <b>${parsed.tp ?? '—'}</b>`,
+      raw_text: parsed.raw_text,
     });
+
+    if (insErr) {
+      console.error("Errore insert signal:", insErr);
+      await sendTelegramMessage(
+        chatId,
+        "❌ Errore interno bot durante il salvataggio del segnale."
+      );
+    } else {
+      await sendTelegramMessage(
+        chatId,
+        `✅ Segnale registrato:\n` +
+          `${parsed.side} ${parsed.order_kind.toUpperCase()} ${parsed.symbol}\n` +
+          `Entry: ${parsed.entry}\nSL: ${parsed.sl} · TP: ${parsed.tp}`
+      );
+    }
 
     return res.status(200).json({ ok: true });
   } catch (err) {
-    console.error('Handler error:', err);
-    try {
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text: '❌ Errore interno bot: ' + (err.message || err),
-      });
-    } catch (e) {
-      console.error('Errore anche nell’invio su Telegram', e);
-    }
+    console.error("Handler error:", err);
     return res.status(200).json({ ok: true });
   }
-}
+};
+
 
 
 
