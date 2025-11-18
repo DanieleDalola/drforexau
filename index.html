@@ -132,108 +132,121 @@
 
 <!-- TradingView widget -->
 <script src="https://s3.tradingview.com/tv.js"></script>
+
 <!-- Supabase client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <!-- Lightweight Charts -->
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 
 <script>
 
+// ------------------------
+// Logger minimale
+// ------------------------
+function log(msg){
+  console.log(msg);
+}
 
-/* ===== CONFIG ===== */
+// ------------------------
+// CONFIG SUPABASE
+// ------------------------
 const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
 
-/* ===== TRADINGVIEW ===== */
+// ------------------------
+// TradingView
+// ------------------------
 let tvWidget;
 function renderTV(symbol){
-  try{
-    document.getElementById('tv').innerHTML = '';
-    tvWidget = new TradingView.widget({
-      symbol,
-      interval: "15",
-      container_id: "tv",
-      autosize: true,
-      theme: "dark",
-      style: "1",
-      locale: "it",
-      withdateranges: true,
-      hide_side_toolbar: false,
-      hide_top_toolbar: false,
-      timezone: "Europe/Rome",
-    });
-    log("TradingView ok: "+symbol);
-  }catch(e){ log("TradingView error: "+(e.message||e)); }
+  document.getElementById('tv').innerHTML = '';
+  tvWidget = new TradingView.widget({
+    symbol,
+    interval: "15",
+    container_id: "tv",
+    autosize: true,
+    theme: "dark",
+    style: "1",
+    locale: "it",
+    withdateranges: true,
+    hide_side_toolbar: false,
+    hide_top_toolbar: false,
+    timezone: "Europe/Rome",
+  });
+  log("TradingView loaded: "+symbol);
 }
+
 const sel = document.getElementById('symbol');
 sel.addEventListener('change', () => renderTV(sel.value));
 renderTV(sel.value);
 
-/* ===== LEVELS (Lightweight Charts) ===== */
+// ------------------------
+// Lightweight charts
+// ------------------------
 let chart, series, priceLines = [];
+
 function initLevels(){
-  try{
-    const el = document.getElementById('levels');
-    el.innerHTML = '';
-    chart = LightweightCharts.createChart(el, {
-      height: 280,
-      layout: { background: { color:'#0b0f14' }, textColor:'#cbd5e1' },
-      rightPriceScale: { borderColor:'#1f2937' },
-      timeScale: { visible:false, borderColor:'#1f2937' },
-      grid: { vertLines:{ color:'#111827' }, horzLines:{ color:'#111827' } },
-    });
-    series = chart.addLineSeries({ color:'#999' });
-    log("Levels chart ok");
-  }catch(e){ log("Levels init error: "+(e.message||e)); }
+  const el = document.getElementById('levels');
+  el.innerHTML = '';
+  chart = LightweightCharts.createChart(el, {
+    height: 280,
+    layout: { background: { color:'#0b0f14' }, textColor:'#cbd5e1' },
+    rightPriceScale: { borderColor:'#1f2937' },
+    timeScale: { visible:false, borderColor:'#1f2937' },
+    grid: { vertLines:{ color:'#111827' }, horzLines:{ color:'#111827' } },
+  });
+  series = chart.addLineSeries({ color:'#999' });
 }
 initLevels();
 
 function drawLevels(sig){
-  try{
-    if (!series) initLevels();
-    priceLines.forEach(pl => series.removePriceLine(pl));
-    priceLines = [];
+  priceLines.forEach(pl => series.removePriceLine(pl));
+  priceLines = [];
 
-    const side = (sig.side||'').toUpperCase();
-    const kind = (sig.order_kind||'market').toLowerCase();
-    const isPending = !sig.filled_at && (kind==='limit' || kind==='stop');
+  const side = (sig.side||'').toUpperCase();
+  const kind = (sig.order_kind||'market').toLowerCase();
 
-    const n = v => (v==null ? NaN : Number(v));
-    const entry = n(sig.entry), sl = n(sig.sl), tp = n(sig.tp);
+  const entry = Number(sig.entry);
+  const sl = Number(sig.sl);
+  const tp = Number(sig.tp);
 
-    const entryColor = isPending ? '#eab308' : (side==='BUY' ? '#16a34a' : '#ef4444');
-    const entryStyle = isPending ? LightweightCharts.LineStyle.Dotted
-                                 : LightweightCharts.LineStyle.Solid;
+  const isPending = !sig.filled_at && (kind==='limit' || kind==='stop');
 
-    if (!Number.isNaN(entry)){
-      priceLines.push(series.createPriceLine({
-        price: entry, color: entryColor, lineWidth: 2, lineStyle: entryStyle,
-        title: `ENTRY ${entry}${isPending?' (pend.)':''}`,
-      }));
-    }
-    if (!Number.isNaN(sl)){
-      priceLines.push(series.createPriceLine({
-        price: sl, color: '#ef4444', lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Solid, title: `SL ${sl}`,
-      }));
-    }
-    if (!Number.isNaN(tp)){
-      priceLines.push(series.createPriceLine({
-        price: tp, color: '#16a34a', lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Solid, title: `TP ${tp}`,
-      }));
-    }
+  const entryColor = isPending ? '#eab308' : (side==='BUY' ? '#16a34a' : '#ef4444');
+  const entryStyle = isPending ? LightweightCharts.LineStyle.Dotted
+                               : LightweightCharts.LineStyle.Solid;
 
-    const dot = document.getElementById('pending-dot');
-    const lab = document.getElementById('pending-label');
-    if (isPending){ dot.style.background='#eab308'; lab.textContent='Pendente'; }
-    else          { dot.style.background='#16a34a'; lab.textContent='Attivo/Market'; }
+  if (!isNaN(entry)){
+    priceLines.push(series.createPriceLine({
+      price: entry, color: entryColor, lineWidth: 2, lineStyle: entryStyle,
+      title: `ENTRY ${entry}${isPending?' (pend.)':''}`,
+    }));
+  }
+  if (!isNaN(sl)){
+    priceLines.push(series.createPriceLine({
+      price: sl, color:'#ef4444', lineWidth:1, title:`SL ${sl}`,
+    }));
+  }
+  if (!isNaN(tp)){
+    priceLines.push(series.createPriceLine({
+      price: tp, color:'#16a34a', lineWidth:1, title:`TP ${tp}`,
+    }));
+  }
 
-    log(`Drawn levels: side=${side} kind=${kind} entry=${entry} sl=${sl} tp=${tp}`);
-  }catch(e){ log("drawLevels error: "+(e.message||e)); }
+  const dot = document.getElementById('pending-dot');
+  const lab = document.getElementById('pending-label');
+  if (isPending){
+    dot.style.background='#eab308';
+    lab.textContent='Pendente';
+  } else {
+    dot.style.background='#16a34a';
+    lab.textContent='Attivo/Market';
+  }
 }
 
-/* ===== SUPABASE + TOAST ===== */
+// ------------------------
+// TOAST ultimo segnale
+// ------------------------
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const toast = document.createElement('div');
@@ -249,70 +262,6 @@ toast.innerHTML = `
 `;
 document.body.appendChild(toast);
 const eLine = toast.querySelector('#sg-line');
-const eSub  = toast.querySelector('#sg-sub');
-
-let last = null;
-
-function showSignal(s){
-  try{
-    last = s;
-    const side = (s.side||'').toUpperCase();
-    const color = side.includes('BUY') ? '#16a34a' : '#ef4444';
-    const kind = (s.order_kind || 'market').toUpperCase();
-
-    eLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry} <span class="muted">(${kind})</span>`;
-    eSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
-
-    drawLevels(s);
-    log("Mostrato ultimo segnale.");
-  }catch(e){ log("showSignal error: "+(e.message||e)); }
-}
-
-document.getElementById('sg-open').addEventListener('click', () => {
-  try{
-    if (!last) return;
-    const code = (last.symbol || 'XAUUSD').toUpperCase();
-    const preferred =
-      code === 'XAUUSD' ? 'OANDA:XAUUSD' :
-      code === 'XAGUSD' ? 'OANDA:XAGUSD' :
-      code === 'EURUSD' ? 'OANDA:EURUSD' : 'OANDA:XAUUSD';
-    sel.value = preferred;
-    sel.dispatchEvent(new Event('change'));
-  }catch(e){ log("sg-open error: "+(e.message||e)); }
-});
-document.getElementById('sg-close').addEventListener('click', () => toast.remove());
-
-(async () => {
-  try{
-    const { data, error } = await sb.from('signals').select('id').limit(1);
-    if (error) log("SELECT test error: "+error.message); else log("Connessione OK a Supabase");
-  }catch(e){ log("SELECT test exception: "+(e.message||e)); }
-})();
-
-async function loadInitial(){
-  try{
-    const { data, error } = await sb.from('signals')
-      .select('*')
-      .order('created_at', { ascending:false })
-      .limit(1);
-    if (error){ log("loadInitial error: "+error.message); return; }
-    if (data && data.length){ showSignal(data[0]); }
-    else { log("Nessun segnale in tabella."); }
-  }catch(e){ log("loadInitial exception: "+(e.message||e)); }
-}
-loadInitial();
-
-sb.channel('signals-feed')
-  .on('postgres_changes', { event:'INSERT', schema:'public', table:'signals' }, (payload) => {
-    log("Realtime INSERT ricevuto");
-    showSignal(payload.new);
-  })
-  .subscribe((status) => {
-    log("Realtime status: "+(status||'unknown'));
-  });
-</script>
-
-</body>
-</html>
+const eSub  = toast.querySel
 
 
