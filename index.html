@@ -48,98 +48,29 @@
 
   <div class="card" style="padding:16px 16px 8px">
     <div class="row" style="justify-content:space-between">
-      <h4 style="margin:0">Levels (Lightweight Charts)</h4>
-      <span class="pill"><span class="dot" id="pending-dot" style="background:#eab308"></span><span id="pending-label">Pendenti</span></span>
+      <h4 style="margin:0">Levels</h4>
+      <span class="pill"><span class="dot" id="pending-dot"></span><span id="pending-label">Attivo/Market</span></span>
     </div>
-    <div id="lwc_chart" style="height:420px;border:1px solid #223;border-radius:12px;margin-top:8px"></div>
+    <div id="levels" style="height:280px;border:1px solid #223;border-radius:12px;margin-top:8px"></div>
   </div>
 
 </div>
 
-<!-- TradingView public widget -->
+<!-- TradingView -->
 <script src="https://s3.tradingview.com/tv.js"></script>
-<!-- Supabase client -->
+<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-<!-- Lightweight Charts -->
-<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<!-- Lightweight Charts (una sola volta) -->
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 
 <script>
-  // ================== CONFIG ==================
-  // Supabase (tuo progetto)
+  // ========= CONFIG =========
   const SUPABASE_URL  = "https://xiiefkpnnraqcvypkktc.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaWVma3BubnJhcWN2eXBra3RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzOTU4MzAsImV4cCI6MjA3ODk3MTgzMH0.F8w_EIN3taFZjl3oHZ3OYhJxW5JJJ3BqM0u9v8r4nWo";
 
-  // TwelveData (opzionale per caricare candele nel grafico levels)
-  const TD_API_KEY = ""; // <-- se vuoi le candele qui, metti la tua chiave; vuoto = solo linee
-
-  // Mappa simbolo TradingView -> TwelveData
-  function tdSymbol(tvCode){
-    const map = {
-      "OANDA:XAUUSD":"XAU/USD",
-      "FX_IDC:XAUUSD":"XAU/USD",
-      "OANDA:XAGUSD":"XAG/USD",
-      "OANDA:EURUSD":"EUR/USD",
-    };
-    return map[tvCode] || "XAU/USD";
-  }
-
-  // ================== TRADINGVIEW WIDGET ==================
+  // ========= TRADINGVIEW =========
   let tvWidget;
   function renderTV(symbol){
-    // ====== LEVELS CHART (Lightweight Charts) ======
-let lwChart, baseSeries, priceLines = [];
-
-function initLevelsChart() {
-  const el = document.getElementById('levels');
-  if (!el) return;
-  el.innerHTML = '';
-
-  lwChart = LightweightCharts.createChart(el, {
-    height: 280,
-    layout: { background: { color: '#0b0f14' }, textColor: '#fff' },
-    grid: { vertLines: { visible: false }, horzLines: { color: '#1f2a35' } },
-    rightPriceScale: { borderVisible: false },
-    timeScale: { visible: false },
-  });
-
-  baseSeries = lwChart.addLineSeries({ color: '#999', visible: false });
-}
-
-function renderLevels(s) {
-  if (!lwChart) initLevelsChart();
-  if (!baseSeries) return;
-
-  priceLines.forEach(l => baseSeries.removePriceLine(l));
-  priceLines = [];
-
-  const side = (s.side || '').toUpperCase();
-  const isPending = (s.status || '').toLowerCase() === 'pending';
-
-  const colorEntry = isPending ? '#f1c40f' : (side.includes('BUY') ? '#16a34a' : '#ef4444');
-  const colorSL    = isPending ? '#f1c40f' : '#ef4444';
-  const colorTP    = isPending ? '#f1c40f' : '#16a34a';
-
-  const toNum = v => (v == null ? null : Number(v));
-
-  const entry = toNum(s.entry);
-  const sl    = toNum(s.sl);
-  const tp    = toNum(s.tp);
-
-  if (entry) priceLines.push(baseSeries.createPriceLine({
-    price: entry, color: colorEntry, lineWidth: 2,
-    lineStyle: LightweightCharts.LineStyle.Solid, title: `ENTRY ${entry}`
-  }));
-  if (sl) priceLines.push(baseSeries.createPriceLine({
-    price: sl, color: colorSL, lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Dotted, title: `SL ${sl}`
-  }));
-  if (tp) priceLines.push(baseSeries.createPriceLine({
-    price: tp, color: colorTP, lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Dotted, title: `TP ${tp}`
-  }));
-}
-
     document.getElementById('tv').innerHTML = '';
     tvWidget = new TradingView.widget({
       symbol,
@@ -156,16 +87,76 @@ function renderLevels(s) {
     });
   }
   const sel = document.getElementById('symbol');
-  sel.addEventListener('change', () => {
-    renderTV(sel.value);
-    loadCandles(tdSymbol(sel.value));
-  });
+  sel.addEventListener('change', () => renderTV(sel.value));
   renderTV(sel.value);
 
-  // ================== SUPABASE ==================
+  // ========= LEVELS (Lightweight Charts) =========
+  let chart, series, priceLines = [];
+  function initLevels() {
+    const el = document.getElementById('levels');
+    el.innerHTML = '';
+    chart = LightweightCharts.createChart(el, {
+      height: 280,
+      layout: { background: { color:'#0b0f14' }, textColor:'#cbd5e1' },
+      rightPriceScale: { borderColor:'#1f2937' },
+      timeScale: { visible:false, borderColor:'#1f2937' },
+      grid: { vertLines:{ color:'#111827' }, horzLines:{ color:'#111827' } },
+    });
+    series = chart.addLineSeries({ color:'#999' }); // basta per creare le price lines
+  }
+  initLevels();
+
+  function drawLevels(sig){
+    if (!series) initLevels();
+
+    // pulisci linee precedenti
+    priceLines.forEach(pl => series.removePriceLine(pl));
+    priceLines = [];
+
+    const side = (sig.side||'').toUpperCase();
+    const kind = (sig.order_kind||'market').toLowerCase();
+    const isPending = !sig.filled_at && (kind==='limit' || kind==='stop');
+
+    // conversione numerica sicura
+    const toNum = v => (v==null ? NaN : Number(v));
+    const entry = toNum(sig.entry);
+    const sl    = toNum(sig.sl);
+    const tp    = toNum(sig.tp);
+
+    const entryColor = isPending ? '#eab308' : (side==='BUY' ? '#16a34a' : '#ef4444');
+    const entryStyle = isPending ? LightweightCharts.LineStyle.Dotted
+                                 : LightweightCharts.LineStyle.Solid;
+
+    if (!Number.isNaN(entry)) {
+      priceLines.push(series.createPriceLine({
+        price: entry, color: entryColor, lineWidth: 2, lineStyle: entryStyle,
+        title: `ENTRY ${entry}${isPending?' (pend.)':''}`,
+      }));
+    }
+    if (!Number.isNaN(sl)) {
+      priceLines.push(series.createPriceLine({
+        price: sl, color: '#ef4444', lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Solid, title: `SL ${sl}`,
+      }));
+    }
+    if (!Number.isNaN(tp)) {
+      priceLines.push(series.createPriceLine({
+        price: tp, color: '#16a34a', lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Solid, title: `TP ${tp}`,
+      }));
+    }
+
+    // badge stato
+    const dot   = document.getElementById('pending-dot');
+    const label = document.getElementById('pending-label');
+    if (isPending){ dot.style.background='#eab308'; label.textContent='Pendente'; }
+    else          { dot.style.background='#16a34a'; label.textContent='Attivo/Market'; }
+  }
+
+  // ========= SUPABASE =========
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-  // piccolo toast “ultimo segnale”
+  // toast “ultimo segnale”
   const toast = document.createElement('div');
   toast.className = 'toast';
   toast.innerHTML = `
@@ -188,22 +179,23 @@ function renderLevels(s) {
   // test connessione
   (async () => {
     try {
-      const { data, error } = await sb.from('signals').select('id').limit(1);
+      const { error } = await sb.from('signals').select('id').limit(1);
       eDiag.textContent = error ? ('Errore SELECT: '+error.message) : 'Connessione OK';
     } catch (e) { eDiag.textContent = 'Eccezione: '+(e?.message||e); }
   })();
 
-  // carica ultimo segnale
+  // carica ultimo
   async function loadInitial() {
     const { data, error } = await sb
       .from('signals')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(1);
-    if (!error && data?.length) showSignal(data[0]); else if (error) eDiag.textContent = 'Errore loadInitial: '+error.message;
+    if (!error && data?.length) showSignal(data[0]);
+    else if (error) eDiag.textContent = 'Errore loadInitial: '+error.message;
   }
 
-  // realtime INSERT
+  // realtime su INSERT
   sb.channel('signals-feed')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'signals' }, (payload) => {
       showSignal(payload.new);
@@ -212,102 +204,19 @@ function renderLevels(s) {
       eDiag.textContent = (eDiag.textContent ? eDiag.textContent+' | ' : '') + 'Realtime: '+status;
     });
 
-  // ================== LIGHTWEIGHT CHART (levels) ==================
-  const lwcEl = document.getElementById('lwc_chart');
-  const chart = LightweightCharts.createChart(lwcEl, {
-    layout: { background: { color: '#0b0f14' }, textColor: '#cbd5e1' },
-    rightPriceScale: { borderColor: '#1f2937' },
-    timeScale: { borderColor: '#1f2937' },
-    grid: { vertLines: { color: '#111827' }, horzLines: { color: '#111827' } },
-    crosshair: { mode: 1 },
-  });
-  const series = chart.addCandlestickSeries({
-    upColor: '#16a34a', downColor: '#ef4444', borderDownColor: '#ef4444',
-    borderUpColor: '#16a34a', wickDownColor: '#ef4444', wickUpColor: '#16a34a'
-  });
-  let priceLines = [];
-
-  async function loadCandles(symbolTD, interval="15min", size=300){
-    if (!TD_API_KEY) { series.setData([]); return; }
-    const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbolTD)}&interval=${interval}&outputsize=${size}&apikey=${TD_API_KEY}&format=JSON`;
-    try{
-      const r = await fetch(url); const j = await r.json();
-      if (!j?.values) return;
-      const data = j.values.map(v => ({
-        time: Math.floor(new Date(v.datetime).getTime()/1000),
-        open: +v.open, high: +v.high, low: +v.low, close: +v.close
-      })).reverse();
-      series.setData(data);
-      chart.timeScale().fitContent();
-    }catch(e){}
-  }
-  loadCandles(tdSymbol(sel.value));
-
-  function drawLevels(sig){
-    // rimuovi precedenti
-    priceLines.forEach(pl => series.removePriceLine(pl));
-    priceLines = [];
-
-    const kind = (sig.order_kind || 'market').toLowerCase();      // market | limit | stop
-    const isPending = !sig.filled_at && (kind==='limit' || kind==='stop');
-
-    const entryStyle = isPending ? LightweightCharts.LineStyle.Dotted : LightweightCharts.LineStyle.Solid;
-    const entryColor = isPending ? '#eab308' : '#22c55e';
-    const slColor = '#ef4444';
-    const tpColor = '#16a34a';
-
-    if (Number.isFinite(sig.entry)){
-      priceLines.push(series.createPriceLine({
-        price: Number(sig.entry),
-        color: entryColor,
-        lineWidth: 2,
-        lineStyle: entryStyle,
-        title: `ENTRY ${sig.entry}${isPending?' (pend.)':''}`
-      }));
-    }
-    if (Number.isFinite(sig.sl)){
-      priceLines.push(series.createPriceLine({
-        price: Number(sig.sl),
-        color: slColor,
-        lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Solid,
-        title: `SL ${sig.sl}`
-      }));
-    }
-    if (Number.isFinite(sig.tp)){
-      priceLines.push(series.createPriceLine({
-        price: Number(sig.tp),
-        color: tpColor,
-        lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Solid,
-        title: `TP ${sig.tp}`
-      }));
-    }
-
-    // badge pendenti
-    const dot = document.getElementById('pending-dot');
-    const label = document.getElementById('pending-label');
-    if (isPending){ dot.style.background = '#eab308'; label.textContent = 'Pendente'; }
-    else { dot.style.background = '#16a34a'; label.textContent = 'Attivo/Market'; }
-  }
-
-  // ================== UI “ultimo segnale” ==================
   function showSignal(s){
     last = s;
     const side = (s.side||'').toUpperCase();
-    const color = side === 'BUY' ? '#16a34a' : '#ef4444';
+    const color = side.includes('BUY') ? '#16a34a' : '#ef4444';
     const kind = (s.order_kind || 'market').toUpperCase();
 
     eLine.innerHTML = `<span style="color:${color}">${side}</span> ${s.symbol} @ ${s.entry} <span class="muted">(${kind})</span>`;
     eSub.textContent = `SL ${s.sl ?? '—'} · TP ${s.tp ?? '—'}`;
-    renderLevels(s);
 
-
-    // aggiorna levels
-    drawLevels(s);
+    drawLevels(s); // <— disegna/aggiorna le linee
   }
 
-  // “Apri sul grafico” → allinea TradingView al simbolo dell’ultimo segnale
+  // pulsanti toast
   document.getElementById('sg-open').addEventListener('click', () => {
     if (!last) return;
     const code = (last.symbol || 'XAUUSD').toUpperCase();
