@@ -18,16 +18,21 @@ function parseSignal(text) {
   if (!text) return null;
 
   const raw = text.trim();
-  const norm = raw.replace(/\r\n/g, '\n');
-  const upper = norm.toUpperCase().replace(/,/g, '.');
+  // tolgo CRLF, virgole e underscore
+  const upper = raw
+    .toUpperCase()
+    .replace(/\r\n/g, '\n')
+    .replace(/_/g, ' ')
+    .replace(/,/g, '.');
 
   // 1) Formato compatto su una riga
-  //   Esempio:  SELL_LIMIT XAUUSD 4050 SL 4060 TP 4042.7
-  let m = upper.match(
-    /\b(BUY|SELL)\s*_?(LIMIT|STOP)?\s+([A-Z0-9:\/]+)\s+([0-9.]+)\s+SL[:\s]*([0-9.]+)\s+TP[:\s]*([0-9.]+)/
+  //    es: SELL_LIMIT XAUUSD 4041 SL 4050 TP 4005
+  const m1 = upper.match(
+    /\b(BUY|SELL)\s+(LIMIT|STOP)?\s*([A-Z0-9:\/]+)\s+([0-9.]+)\s+SL[:\s]*([0-9.]+)\s+TP[:\s]*([0-9.]+)/
   );
-  if (m) {
-    const [, side, kindRaw, symbolRaw, entryRaw, slRaw, tpRaw] = m;
+
+  if (m1) {
+    const [, side, kindRaw, symbolRaw, entryRaw, slRaw, tpRaw] = m1;
     return {
       side,
       order_kind: (kindRaw || 'MARKET').toUpperCase(),
@@ -39,46 +44,31 @@ function parseSignal(text) {
     };
   }
 
-  // 2) Formato multi-linea in stile:
+  // 2) Formato multi-linea:
   //   Buy limit xauusd
   //   Entry4005
   //   SL4995
   //   TP 4035
-
-  const sideMatch = upper.match(/\b(BUY|SELL)\b/);
-  if (!sideMatch) return null;
-
-  const kindMatch = upper.match(/\b(LIMIT|STOP)\b/);
-
-  // simbolo: cerchiamo nelle righe, ma se non c'è assumiamo XAUUSD (il tuo caso tipico)
-  let symbolMatch = upper.match(
-    /\b(XAUUSD|XAU\/USD|XAUUSDT|XAGUSD|EURUSD|BTCUSD|BTCUSDT)\b/
+  const m2 = upper.match(
+    /\b(BUY|SELL)\s+(LIMIT|STOP)?[\s\S]*?(XAUUSD|XAGUSD|EURUSD|BTCUSD|BTCUSDT)?[\s\S]*?ENTRY\D*([0-9.]+)[\s\S]*?SL\D*([0-9.]+)[\s\S]*?TP\D*([0-9.]+)/
   );
 
-  // qui diventiamo molto più tolleranti: qualsiasi cosa tra la parola e il numero
-  const entryMatch = upper.match(/ENTRY[^0-9]*([0-9.]+)/);
-  const slMatch    = upper.match(/\bSL[^0-9]*([0-9.]+)/);
-  const tpMatch    = upper.match(/\bTP[^0-9]*([0-9.]+)/);
+  if (m2) {
+    const [, side, kindRaw, symbolRaw, entryRaw, slRaw, tpRaw] = m2;
+    const symbol = (symbolRaw || 'XAUUSD').replace('/', '').toUpperCase();
 
-  if (!entryMatch || !slMatch || !tpMatch) {
-    return null; // non abbiamo abbastanza info per un segnale
+    return {
+      side,
+      order_kind: (kindRaw || 'MARKET').toUpperCase(),
+      symbol,
+      entry: toNumber(entryRaw),
+      sl: toNumber(slRaw),
+      tp: toNumber(tpRaw),
+      raw,
+    };
   }
 
-  const side = sideMatch[1];
-  const kind = (kindMatch?.[1] || 'MARKET').toUpperCase();
-  const symbol = symbolMatch
-    ? symbolMatch[1].replace('/', '').toUpperCase()
-    : 'XAUUSD';
-
-  return {
-    side,
-    order_kind: kind,
-    symbol,
-    entry: toNumber(entryMatch[1]),
-    sl: toNumber(slMatch[1]),
-    tp: toNumber(tpMatch[1]),
-    raw,
-  };
+  return null;
 }
 
 // invia risposta al gruppo / chat
@@ -121,13 +111,18 @@ export default async function handler(req, res) {
     const parsed = parseSignal(text);
 
     if (!parsed) {
-      // messaggio non riconosciuto come segnale → ignoro in silenzio
+      // 👇 così vediamo SUBITO se il parsing fallisce
+      const safe = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      await replyToTelegram(
+        chatId,
+        messageId,
+        `⚠️ Non ho riconosciuto questo come segnale.\n\n<code>${safe}</code>`
+      );
       return res.status(200).json({ ok: true, ignored: 'no signal pattern' });
     }
 
     const { side, order_kind, symbol, entry, sl, tp, raw } = parsed;
 
-    // salva su Supabase
     const { error } = await supabase.from('signals').insert([
       {
         symbol,
@@ -171,5 +166,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: e.message || String(e) });
   }
 }
+
 
 
