@@ -1,0 +1,9 @@
+{
+  "name": "drforexau",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.1",
+    "node-fetch": "^3.3.2"
+  }
+}
