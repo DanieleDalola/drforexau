@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>DR-Forexau – Dashboard</title>
 
-<!-- PWA -->
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0b0f14">
+  <!-- PWA / ICONS -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-512.png">
+  <meta name="theme-color" content="#0b0f14">
 
-<style>
-
+  <style>
     html,body{
       height:100%;
       margin:0;
@@ -149,48 +150,42 @@
       background:#111827;
       color:#e5e7eb;
     }
+
+    /* Bottone install PWA */
     .install-btn {
-    margin-top: 10px;
-    padding: 8px 14px;
-    border-radius: 999px;
-    border: 1px solid #334155;
-    background: #020617;
-    color: #e2e8f0;
-    font-size: 13px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-  }
-  .install-btn span {
-    font-size: 16px;
-  }
-  .install-btn:hover {
-    background: #0f172a;
-  }
-  .install-btn.hidden {
-    display: none;
-  }
-</style>
+      margin-top: 10px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      background: #020617;
+      color: #e2e8f0;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .install-btn span {
+      font-size: 16px;
+    }
+    .install-btn:hover {
+      background: #0f172a;
+    }
+    .install-btn.hidden {
+      display: none;
+    }
+  </style>
 
-<!-- PWA INSTALLATION -->
-<link rel="manifest" href="manifest.json">
-
-<link rel="icon" type="image/png" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-512.png">
-
-<meta name="theme-color" content="#0b0f14">
-
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/service-worker.js')
-      .then(reg => console.log("SW ok", reg))
-      .catch(err => console.error("SW error", err));
-    });
-  }
-</script>
-
+  <!-- Registrazione service worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(reg => console.log("SW ok", reg))
+          .catch(err => console.error("SW error", err));
+      });
+    }
+  </script>
 </head>
 <body>
 
@@ -239,6 +234,11 @@
           </select>
         </label>
         <button id="logout-btn" type="button">Logout</button>
+
+        <!-- Pulsante install PWA -->
+        <button id="install-btn" class="install-btn hidden" type="button">
+          <span>⬇️</span> Installa app
+        </button>
       </div>
     </div>
   </header>
@@ -657,12 +657,49 @@ function setupRealtime(){
       loadDashboard();
     })
     .on('postgres_changes', { event:'UPDATE', schema:'public', table:'signals' }, () => {
-      // update (per cancella hit / stop hit)
+      // update (per cancella / hit / stop hit)
       loadDashboard();
     })
     .subscribe((status) => {
       log("Realtime status: "+(status||'unknown'));
     });
+}
+
+// ========================
+// PWA INSTALL BUTTON
+// ========================
+let deferredPrompt;
+const installBtn = document.getElementById('install-btn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+
+  if (installBtn) {
+    installBtn.classList.remove('hidden');
+  }
+});
+
+if (installBtn) {
+  installBtn.addEventListener('click', async () => {
+    try {
+      if (!deferredPrompt) return;
+
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+
+      if (outcome === 'accepted') {
+        console.log('Utente ha installato la PWA');
+      } else {
+        console.log('Utente ha rifiutato la PWA');
+      }
+
+      deferredPrompt = null;
+      installBtn.classList.add('hidden');
+    } catch (err) {
+      console.error('Errore install PWA', err);
+    }
+  });
 }
 
 // ========================
